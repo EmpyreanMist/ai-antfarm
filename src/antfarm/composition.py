@@ -19,6 +19,7 @@ from antfarm.config.schema import (
     ScenarioConfig,
     SqliteStorageConfig,
 )
+from antfarm.domain.json_values import JsonObject
 from antfarm.domain.models import AgentId, RunId, RunMetadata
 from antfarm.environments import CounterEnvironment
 from antfarm.ports.models import ModelProvider, ModelResponse
@@ -57,6 +58,16 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
         providers[provider_id] = MockModelProvider(decisions)
 
     resolved_agents = config.expand_agents()
+    available_actions: tuple[JsonObject, ...] = tuple(
+        {
+            "kind": action.kind,
+            "description": "Increase the shared counter.",
+            "parameters": {
+                "amount": "A positive integer specifying the increase."
+            },
+        }
+        for action in config.actions
+    )
     used_model_ids = sorted({agent.model_ref for agent in resolved_agents})
     models: dict[str, ModelProvider] = {}
     for model_id in used_model_ids:
@@ -94,6 +105,7 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
             id=agent_id,
             model_ref=agent_config.model_ref,
             provider=provider,
+            available_actions=available_actions,
         )
 
     storage: Storage

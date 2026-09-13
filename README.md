@@ -22,8 +22,8 @@ The foundation currently includes:
 
 The repository bootstrap, strict scenario schema, core contracts, deterministic
 engine lifecycle, baseline scheduling and memory, SQLite recovery, and model
-provider adapters are complete. The complete CLI inspection surface is the final
-planned M0 milestone. See [the roadmap](docs/ROADMAP.md) for current progress.
+provider adapters, CLI inspection, and the minimal end-to-end workflow are
+complete. See [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Quick Start
 
@@ -32,6 +32,7 @@ Requirements: Python 3.12+ and `uv`.
 ```console
 uv sync --dev
 uv run antfarm validate scenarios/examples/minimal.yaml
+uv run antfarm inspect scenarios/examples/minimal.yaml
 uv run antfarm run scenarios/examples/minimal.yaml
 ```
 
@@ -40,6 +41,33 @@ The example runs entirely offline and produces:
 ```text
 run=minimal ticks=1 events=10 final_state={"value":3}
 ```
+
+`inspect` prints the canonical scenario JSON, including deterministically expanded
+agents, without composing providers or starting a run.
+
+## Try a Local Model with Ollama
+
+The included example uses Ollama's OpenAI-compatible endpoint and structured
+outputs. Start Ollama, then run:
+
+```console
+ollama pull qwen3.5:0.8b
+uv run antfarm validate scenarios/examples/ollama.yaml
+uv run antfarm inspect scenarios/examples/ollama.yaml
+uv run antfarm run scenarios/examples/ollama.yaml
+```
+
+The final command asks the local model for a validated `increment` action. A
+successful response completes one tick with six events and a positive counter
+value. With Ollama 0.34.0 and `qwen3.5:0.8b`, the verified output was:
+
+```text
+run=ollama-local ticks=1 events=6 final_state={"value":1}
+```
+
+The scenario disables model reasoning so the small model returns structured
+content within its completion budget. It sends no API key and makes no hosted
+model request.
 
 ## Development Checks
 

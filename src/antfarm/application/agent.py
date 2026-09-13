@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from antfarm.domain.json_values import JsonObject
 from antfarm.domain.models import ActionProposal, AgentContext, AgentId
 from antfarm.ports.models import (
     MalformedModelResponseError,
@@ -19,6 +20,7 @@ class ModelBackedAgent:
     id: AgentId
     model_ref: str
     provider: ModelProvider
+    available_actions: tuple[JsonObject, ...] = ()
 
     async def decide(self, context: AgentContext) -> ActionProposal | None:
         try:
@@ -27,10 +29,11 @@ class ModelBackedAgent:
                     actor_id=self.id,
                     observation=context.observation,
                     memories=context.memories,
+                    available_actions=self.available_actions,
                 )
             )
         except MalformedModelResponseError as error:
-            raise MalformedDecisionError from error
+            raise MalformedDecisionError(str(error)) from error
         if response.action_kind is None:
             return None
         try:

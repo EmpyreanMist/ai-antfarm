@@ -24,6 +24,13 @@ def _request() -> ModelRequest:
             state={"value": 7},
         ),
         memories=(MemoryItem(kind="action_result", content={"value": 6}),),
+        available_actions=(
+            {
+                "kind": "increment",
+                "description": "Increase the counter.",
+                "parameters": {"amount": "A positive integer."},
+            },
+        ),
     )
 
 
@@ -86,9 +93,19 @@ def test_structured_request_and_response_use_provider_neutral_values() -> None:
     assert body["model"] == "example/model"
     assert body["temperature"] == 0
     assert body["response_format"]["type"] == "json_schema"
+    assert body["response_format"]["json_schema"]["schema"]["properties"][
+        "action_kind"
+    ]["enum"] == ["increment", None]
     context = json.loads(body["messages"][1]["content"])
     assert context == {
         "actor_id": "alice",
+        "available_actions": [
+            {
+                "description": "Increase the counter.",
+                "kind": "increment",
+                "parameters": {"amount": "A positive integer."},
+            }
+        ],
         "memories": [{"content": {"value": 6}, "kind": "action_result"}],
         "observation": {"state": {"value": 7}, "tick": 3},
     }

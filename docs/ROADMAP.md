@@ -20,7 +20,11 @@ M0 proves a deterministic, local-first vertical slice. Each item below is issue-
   OpenAI-compatible chat-completions adapter support structured responses,
   model configuration, API-key environment variables, safe malformed-response
   handling, and enforced timeouts.
-- **M0-08 — Next:** complete the CLI and minimal end-to-end scenario surface.
+- **M0-08 — Complete:** validate, inspect, and run operate on documented
+  examples; CLI failures use clear stderr messages and non-zero exit codes; and
+  end-to-end tests prove matching seeded mock events and final state.
+
+**M0 Foundation is complete.**
 
 ### M0-01: Repository and Python Bootstrap
 

@@ -106,14 +106,14 @@ class SimulationEngine:
                     CognitionOutcome(agent_id=agent_id, tick=tick, kind="timed_out")
                 )
                 continue
-            except MalformedDecisionError:
+            except MalformedDecisionError as error:
                 events.append(
                     self._event(
                         tick,
                         "cognition.malformed",
                         actor_id=agent_id,
                         causation_id=observation_event.event_id,
-                        payload={"reason": "invalid decision"},
+                        payload={"reason": str(error) or "invalid decision"},
                     )
                 )
                 outcomes.append(

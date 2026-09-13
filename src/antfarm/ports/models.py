@@ -20,6 +20,15 @@ class ModelRequest:
     actor_id: AgentId
     observation: Observation
     memories: Sequence[MemoryItem]
+    available_actions: Sequence[JsonObject] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "memories", tuple(self.memories))
+        object.__setattr__(
+            self,
+            "available_actions",
+            tuple(freeze_object(action) for action in self.available_actions),
+        )
 
 
 @dataclass(frozen=True, slots=True)

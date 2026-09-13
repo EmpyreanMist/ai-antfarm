@@ -1,0 +1,33 @@
+schema_version: 1
+run:
+  id: ollama-local
+  seed: 17
+  ticks: 1
+providers:
+  local-ollama:
+    kind: openai_compatible
+    base_url: http://localhost:11434/v1
+models:
+  qwen-local:
+    provider_ref: local-ollama
+    model: qwen3.5:0.8b
+    timeout_seconds: 120
+    parameters:
+      temperature: 0
+      seed: 17
+      reasoning_effort: none
+      max_tokens: 128
+agents:
+  - id: alice
+    model_ref: qwen-local
+actions:
+  - kind: increment
+environment:
+  kind: counter
+  initial_value: 0
+memory:
+  kind: in_memory
+scheduling:
+  kind: stable
+storage:
+  kind: memory

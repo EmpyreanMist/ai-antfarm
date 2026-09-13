@@ -17,17 +17,6 @@ from antfarm.ports.models import (
 
 type HttpTransport = Callable[[str, Mapping[str, str], bytes, float], bytes]
 
-_ACTION_SCHEMA: dict[str, object] = {
-    "type": "object",
-    "properties": {
-        "action_kind": {"type": ["string", "null"]},
-        "parameters": {"type": "object"},
-    },
-    "required": ["action_kind", "parameters"],
-    "additionalProperties": False,
-}
-
-
 class OpenAICompatibleModelProvider:
     """Generate provider-neutral decisions through `/chat/completions`."""
 
@@ -89,6 +78,26 @@ class OpenAICompatibleModelProvider:
                 {"kind": item.kind, "content": thaw_json(item.content)}
                 for item in request.memories
             ],
+            "available_actions": [
+                thaw_json(action) for action in request.available_actions
+            ],
+        }
+        action_kinds = [
+            action["kind"]
+            for action in request.available_actions
+            if isinstance(action.get("kind"), str)
+        ]
+        action_schema: dict[str, object] = {
+            "type": "object",
+            "properties": {
+                "action_kind": {
+                    "type": ["string", "null"],
+                    "enum": [*action_kinds, None],
+                },
+                "parameters": {"type": "object"},
+            },
+            "required": ["action_kind", "parameters"],
+            "additionalProperties": False,
         }
         thawed_parameters = thaw_json(self._parameters)
         if not isinstance(thawed_parameters, dict):
@@ -100,9 +109,10 @@ class OpenAICompatibleModelProvider:
                 {
                     "role": "system",
                     "content": (
-                        "Propose one simulation action. Return only the requested "
-                        "structured JSON. Use null action_kind and empty parameters "
-                        "to take no action."
+                        "Propose one simulation action using only available_actions. "
+                        "Follow its parameter requirements exactly. Return only the "
+                        "requested structured JSON. Use null action_kind and empty "
+                        "parameters to take no action."
                     ),
                 },
                 {
@@ -117,7 +127,7 @@ class OpenAICompatibleModelProvider:
                 "json_schema": {
                     "name": "antfarm_action_proposal",
                     "strict": True,
-                    "schema": _ACTION_SCHEMA,
+                    "schema": action_schema,
                 },
             },
         }
