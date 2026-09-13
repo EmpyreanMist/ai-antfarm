@@ -480,6 +480,25 @@ Verify that later decisions receive earlier messages, and that harvest/contribut
 
 still work. Live terminal rendering arrives in M2-04.
 
+**Manual acceptance (2026-09-13):** the first real
+`social-ollama.yaml` run with `qwen3.5:0.8b` produced nine malformed
+cognitions. Investigation exposed two OpenAI-compatibility gaps rather than a
+social engine defect: the scenario used Ollama's native `think` field on the
+`/v1/chat/completions` endpoint, while the adapter assumed the endpoint would
+always return bare schema-conforming JSON. Fix `24f1c1e` changed the scenario to
+use OpenAI-compatible `reasoning_effort: none` with deterministic, bounded generation;
+the generic adapter now repeats the exact schema in the system instruction and
+accepts one complete Markdown JSON fence while preserving strict validation and
+redacted normal errors.
+
+The post-fix manual run passed three ticks with 41 events, eight applied `say`
+actions, eight persisted messages, zero malformed, failed, or timed-out
+cognitions, one rejected action, and no unintended world-state mutation. The
+small model produced simplistic and self-referential dialogue; this is accepted
+as model quality variation because the structured-output and validated social
+action pipeline behaved correctly. M2-02 is therefore manually verified; no
+M2-03 work was included in the compatibility fix.
+
 ### M2-03: Paced Autonomous Execution and Safe Stop — Next
 
 **Purpose:** run a shared backend indefinitely at a sensible cadence while

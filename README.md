@@ -169,6 +169,13 @@ the exact JSON Schema in both `response_format` and the system instruction, and
 accepts either bare structured JSON or a single Markdown JSON fence for compatible
 endpoints that wrap an otherwise valid response.
 
+Manual M2-02 acceptance with Ollama and `qwen3.5:0.8b` passed after fix
+`24f1c1e`: three ticks produced 41 events, eight applied `say` actions, eight
+persisted messages, zero malformed/failed/timed-out cognitions, one rejected
+action, and no unintended world-state mutation. The small model's dialogue was
+simplistic and sometimes self-referential, but that is a model-quality limitation,
+not a failure of the social action or structured-output pipeline.
+
 To route only Charlie to a second local model, first pull that model, then copy the
 `qwen-local` entry under `models` to a new key, change its `model` tag, and set
 Charlie's `model_ref` to the new key. This creates one provider adapter per used

@@ -155,6 +155,16 @@ Events support audit and metrics now and prepare for replay later. A future repl
 
 M0 includes a deterministic mock provider and one generic OpenAI-compatible adapter with a configurable base URL. The AntFarm `ModelProvider` request and response types remain independent of the OpenAI wire format. Ollama, vLLM, LM Studio, and remote services are endpoint choices or later adapters, never domain dependencies.
 
+Structured-output compatibility stays inside that generic adapter. It sends the
+closed response schema through the OpenAI-compatible `response_format` field and
+repeats the exact schema in the system instruction for endpoints that do not fully
+enforce the wire-level constraint. It accepts a bare JSON object or one complete
+Markdown JSON fence, but does not extract JSON from arbitrary prose or reasoning.
+Malformed-response errors expose bounded diagnostics without including raw prompts
+or model output. Scenario parameters must follow the selected endpoint contract;
+for example, Ollama's OpenAI-compatible endpoint uses `reasoning_effort`, while
+the native-only `think` request field is not sent.
+
 OASIS is postponed. Its social-media simulation model and CAMEL-linked types would otherwise compete with AntFarm's ownership of environments, actions, agents, and time. A future compatibility spike may introduce an optional adapter for a concrete social-media scenario, but no OASIS or CAMEL type may cross an AntFarm port.
 
 ## Repository Shape
