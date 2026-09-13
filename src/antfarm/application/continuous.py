@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from antfarm.application.engine import SimulationEngine
-from antfarm.domain.models import Event, SimulationSnapshot
+from antfarm.domain.models import Event, SimulationSnapshot, Tick
 
 type EventBatchHandler = Callable[[Sequence[Event]], None]
 
@@ -44,6 +44,7 @@ class ContinuousRunner:
         clock: PacingClock | None = None,
         on_batch: EventBatchHandler | None = None,
         should_stop: Callable[[], bool] | None = None,
+        on_waiting: Callable[[Tick, float], None] | None = None,
     ) -> None:
         if not math.isfinite(tick_seconds) or tick_seconds <= 0:
             raise ValueError("tick interval must be a finite positive number")
@@ -52,6 +53,7 @@ class ContinuousRunner:
         self._clock = clock or AsyncioPacingClock()
         self._on_batch = on_batch
         self._should_stop = should_stop or (lambda: False)
+        self._on_waiting = on_waiting
 
     async def run(self) -> ContinuousRunResult:
         next_start: float | None = None
@@ -59,7 +61,11 @@ class ContinuousRunner:
             try:
                 now = self._clock.monotonic()
                 if next_start is not None and now < next_start:
-                    await self._clock.sleep(next_start - now)
+                    delay = next_start - now
+                    if self._on_waiting is not None:
+                        next_tick = Tick(int(self._engine.snapshot().tick) + 1)
+                        self._on_waiting(next_tick, delay)
+                    await self._clock.sleep(delay)
                 started = self._clock.monotonic()
                 result = await self._engine.step()
             except asyncio.CancelledError:

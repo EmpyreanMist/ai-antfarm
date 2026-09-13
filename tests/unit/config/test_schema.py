@@ -260,6 +260,42 @@ def test_agent_and_pool_cadence_and_budgets_are_normalized() -> None:
     assert config.observability.event_buffer_limit == 12
 
 
+def test_active_agent_count_selects_a_validated_prefix() -> None:
+    data = _valid_data()
+    data["agents"] = []
+    data["agent_pools"] = [
+        {"id_prefix": "worker", "count": 3, "model_ref": "deterministic"}
+    ]
+    data["providers"] = {"scripted": {"kind": "mock", "decisions": {}}}
+    run = data["run"]
+    assert isinstance(run, dict)
+    run["active_agents"] = 2
+
+    config = ScenarioConfig.model_validate(data)
+
+    assert [agent.id for agent in config.active_agents()] == [
+        "worker-001",
+        "worker-002",
+    ]
+    assert json.loads(config.normalized_json())["active_agent_ids"] == [
+        "worker-001",
+        "worker-002",
+    ]
+
+
+@pytest.mark.parametrize("active_agents", [0, 4, 11])
+def test_active_agent_count_is_bounded_by_milestone_and_population(
+    active_agents: int,
+) -> None:
+    data = _valid_data()
+    run = data["run"]
+    assert isinstance(run, dict)
+    run["active_agents"] = active_agents
+
+    with pytest.raises(ValidationError, match="active|greater than|less than"):
+        ScenarioConfig.model_validate(data)
+
+
 def test_scheduling_requires_a_due_strategy() -> None:
     data = _valid_data()
     data["scheduling"] = {"kind": "stable", "interval": None}

@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from antfarm import cli
@@ -91,3 +93,49 @@ def test_continuous_run_is_explicit_and_reports_last_committed_tick(
     assert "continuous; tick interval >= 0.5s; Ctrl+C to stop" in captured.out
     assert "stopped; last committed tick=7" in captured.out
     assert "events=0" in captured.out
+
+
+def test_live_run_forwards_agent_count_and_owns_its_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async def live_run(
+        path: object,
+        *,
+        tick_seconds: float,
+        active_agents: int | None,
+        output: object,
+    ) -> RunSummary:
+        del path
+        assert tick_seconds == 0.25
+        assert active_agents == 7
+        assert output is sys.stdout
+        print("live output")
+        return RunSummary("fresh-live", 2, {"resource": 3}, ())
+
+    monkeypatch.setattr(cli, "run_live_scenario", live_run)
+
+    result = cli.main(
+        [
+            "run",
+            "scenario.yaml",
+            "--live",
+            "--continuous",
+            "--agents",
+            "7",
+            "--tick-seconds",
+            "0.25",
+        ]
+    )
+
+    assert result == 0
+    assert capsys.readouterr().out == "live output\n"
+
+
+def test_live_flags_require_explicit_continuous_mode(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = cli.main(["run", "scenario.yaml", "--live"])
+
+    assert result == 2
+    assert "--live requires --continuous" in capsys.readouterr().err

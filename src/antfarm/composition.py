@@ -1,6 +1,7 @@
 """Closed composition root for the runtime components implemented so far."""
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from antfarm.adapters.events import InMemoryEventBus
@@ -22,7 +23,7 @@ from antfarm.config.schema import (
     SqliteStorageConfig,
 )
 from antfarm.domain.json_values import JsonObject
-from antfarm.domain.models import AgentId, AgentPersonality, RunId, RunMetadata
+from antfarm.domain.models import AgentId, AgentPersonality, RunId, RunMetadata, Tick
 from antfarm.domain.protocols import Environment
 from antfarm.environments import CommonsEnvironment, CounterEnvironment
 from antfarm.ports.models import ModelProvider, ModelResponse
@@ -43,7 +44,11 @@ class ComposedSimulation:
         self.storage.close()
 
 
-def compose(config: ScenarioConfig) -> ComposedSimulation:
+def compose(
+    config: ScenarioConfig,
+    *,
+    on_cognition_started: Callable[[Tick, AgentId, str], None] | None = None,
+) -> ComposedSimulation:
     """Compose only the M0.1 runtime kinds; later kinds fail explicitly."""
 
     if config.rules:
@@ -64,7 +69,7 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
         }
         providers[provider_id] = MockModelProvider(decisions)
 
-    resolved_agents = config.expand_agents()
+    resolved_agents = config.active_agents()
     action_catalog: dict[str, JsonObject] = {
         "increment": {
             "kind": "increment",
@@ -212,6 +217,7 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
             agent_ids=tuple(str(agent_id) for agent_id in agents),
         ),
         memory_recall_limit=config.memory.recall_limit,
+        on_cognition_started=on_cognition_started,
     )
     return ComposedSimulation(
         engine=engine,

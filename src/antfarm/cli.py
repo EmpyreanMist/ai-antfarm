@@ -11,15 +11,26 @@ from pathlib import Path
 from pydantic import ValidationError
 from ruamel.yaml.error import YAMLError
 
+from antfarm.adapters.terminal import TerminalOutputError
 from antfarm.config import load_scenario
+from antfarm.config.schema import M2_MAX_ACTIVE_AGENTS
 from antfarm.domain.json_values import thaw_json
-from antfarm.runner import run_continuous_scenario, run_scenario
+from antfarm.runner import run_continuous_scenario, run_live_scenario, run_scenario
 
 
 def _positive_float(value: str) -> float:
     parsed = float(value)
     if not math.isfinite(parsed) or parsed <= 0:
         raise argparse.ArgumentTypeError("must be a finite positive number")
+    return parsed
+
+
+def _active_agent_count(value: str) -> int:
+    parsed = int(value)
+    if not 1 <= parsed <= M2_MAX_ACTIVE_AGENTS:
+        raise argparse.ArgumentTypeError(
+            f"must be between 1 and {M2_MAX_ACTIVE_AGENTS}"
+        )
     return parsed
 
 
@@ -32,6 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
     run = commands.add_parser("run")
     run.add_argument("scenario", type=Path)
     run.add_argument("--continuous", action="store_true")
+    run.add_argument("--live", action="store_true")
+    run.add_argument("--agents", type=_active_agent_count)
     run.add_argument("--tick-seconds", type=_positive_float, default=1.0)
     return parser
 
@@ -47,6 +60,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             config = load_scenario(args.scenario)
             print(config.normalized_json())
             return 0
+        if args.live and not args.continuous:
+            raise ValueError("--live requires --continuous")
+        if args.agents is not None and not args.live:
+            raise ValueError("--agents requires --live")
+        if args.live:
+            asyncio.run(
+                run_live_scenario(
+                    args.scenario,
+                    tick_seconds=args.tick_seconds,
+                    active_agents=args.agents,
+                    output=sys.stdout,
+                )
+            )
+            return 0
         if args.continuous:
             print(
                 f"continuous; tick interval >= {args.tick_seconds:g}s; "
@@ -61,6 +88,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"stopped; last committed tick={summary.ticks}")
         else:
             summary = asyncio.run(run_scenario(args.scenario))
+    except TerminalOutputError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     except (OSError, ValueError, ValidationError, YAMLError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

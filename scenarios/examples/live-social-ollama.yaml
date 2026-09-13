@@ -1,0 +1,59 @@
+schema_version: 1
+run:
+  id: live-social-ollama
+  seed: 101
+  ticks: 3
+  active_agents: 3
+providers:
+  local-ollama:
+    kind: openai_compatible
+    base_url: http://localhost:11434/v1
+models:
+  qwen-local:
+    provider_ref: local-ollama
+    model: qwen3.5:0.8b
+    timeout_seconds: 180
+    parameters: {temperature: 0, seed: 101, reasoning_effort: none, max_tokens: 256}
+  optional-second-local:
+    provider_ref: local-ollama
+    model: llama3.2:1b
+    timeout_seconds: 180
+    parameters: {temperature: 0, seed: 101, max_tokens: 256}
+personalities:
+  cautious: {description: Protect the commons and warn about scarcity.}
+  pragmatic: {description: Balance personal needs with practical cooperation.}
+  curious: {description: Ask questions and respond to public evidence.}
+  generous: {description: Prefer contributing and helping the whole group.}
+  patient: {description: Observe quietly before choosing whether to act.}
+  industrious: {description: Gather modestly and explain concrete intentions.}
+  diplomatic: {description: Seek consensus and defuse disagreement.}
+  transparent: {description: Share reasoning openly and request clear plans.}
+  skeptical: {description: Challenge risky proposals while respecting validation.}
+  watchful: {description: Monitor the common balance and discourage overuse.}
+agents:
+  - {id: alice, model_ref: qwen-local, personality_ref: cautious, cognition_interval: 10}
+  - {id: bob, model_ref: qwen-local, personality_ref: pragmatic, cognition_interval: 10}
+  - {id: charlie, model_ref: qwen-local, personality_ref: curious, cognition_interval: 10}
+  - {id: diana, model_ref: qwen-local, personality_ref: generous, cognition_interval: 10}
+  - {id: eve, model_ref: qwen-local, personality_ref: patient, cognition_interval: 10}
+  - {id: frank, model_ref: qwen-local, personality_ref: industrious, cognition_interval: 10}
+  - {id: grace, model_ref: qwen-local, personality_ref: diplomatic, cognition_interval: 10}
+  - {id: heidi, model_ref: qwen-local, personality_ref: transparent, cognition_interval: 10}
+  - {id: ivan, model_ref: qwen-local, personality_ref: skeptical, cognition_interval: 10}
+  - {id: judy, model_ref: qwen-local, personality_ref: watchful, cognition_interval: 10}
+actions: [{kind: harvest}, {kind: contribute}, {kind: say}]
+environment:
+  kind: commons
+  initial_resource: 8
+  initial_endowment: 2
+  social: {message_max_length: 240, history_limit: 10, roster_limit: 10}
+memory: {kind: in_memory, recall_limit: 10, retention_limit: 20}
+scheduling:
+  kind: stable
+  interval: 10
+  stagger: true
+  max_cognitions_per_tick: 1
+  failure_retry_cooldown_max: 8
+metrics: [action_count, rejection_count, failure_count, agent_outcomes]
+observability: {event_buffer_limit: 100}
+storage: {kind: sqlite, path: live-social-ollama.db}

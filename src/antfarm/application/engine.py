@@ -1,6 +1,6 @@
 """Deterministic, sequential simulation orchestration."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from random import Random
 from typing import cast
@@ -50,6 +50,7 @@ class SimulationEngine:
         storage: Storage,
         metrics: BuiltInMetricCollector | None = None,
         memory_recall_limit: int = 10,
+        on_cognition_started: Callable[[Tick, AgentId, str], None] | None = None,
     ) -> None:
         if memory_recall_limit < 0:
             raise ValueError("memory recall limit must not be negative")
@@ -69,6 +70,7 @@ class SimulationEngine:
         self._rng = Random(seed)
         self._tick = Tick(0)
         self._sequence = 0
+        self._on_cognition_started = on_cognition_started
 
     @property
     def metrics(self) -> BuiltInMetricCollector:
@@ -114,6 +116,8 @@ class SimulationEngine:
                     )
                 ),
             )
+            if self._on_cognition_started is not None:
+                self._on_cognition_started(tick, agent_id, agent.model_ref)
             try:
                 proposal = await agent.decide(context)
             except TimeoutError:
@@ -207,7 +211,10 @@ class SimulationEngine:
                         "action.rejected",
                         actor_id=agent_id,
                         causation_id=proposal_event.event_id,
-                        payload={"reason": validation.reason or "rejected"},
+                        payload={
+                            "kind": proposal.kind,
+                            "reason": validation.reason or "rejected",
+                        },
                     )
                 )
                 outcomes.append(
@@ -232,7 +239,11 @@ class SimulationEngine:
                 "action.applied",
                 actor_id=agent_id,
                 causation_id=validated_event.event_id,
-                payload={**result.payload, "kind": action.kind},
+                payload={
+                    **result.payload,
+                    "kind": action.kind,
+                    "parameters": action.parameters,
+                },
             )
             events.append(result_event)
             self._memory.append(

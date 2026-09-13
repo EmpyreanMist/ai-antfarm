@@ -17,6 +17,7 @@ Identifier = Annotated[str, Field(min_length=1, pattern=r"^[a-z][a-z0-9_-]*$")]
 EventKind = Annotated[str, Field(min_length=1, pattern=r"^[a-z][a-z0-9_.-]*$")]
 EnvironmentVariable = Annotated[str, Field(min_length=1, pattern=r"^[A-Z_][A-Z0-9_]*$")]
 Scalar = str | int | float | bool | None
+M2_MAX_ACTIVE_AGENTS = 10
 
 
 class StrictModel(BaseModel):
@@ -29,6 +30,7 @@ class RunConfig(StrictModel):
     id: Identifier
     seed: int = 0
     ticks: PositiveInt = 1
+    active_agents: Annotated[int, Field(ge=1, le=M2_MAX_ACTIVE_AGENTS)] | None = None
 
 
 class EngineConfig(StrictModel):
@@ -238,6 +240,14 @@ class ScenarioConfig(StrictModel):
         self._require_unique(
             "expanded agent identifiers", [agent.id for agent in expanded_agents]
         )
+        if (
+            self.run.active_agents is not None
+            and self.run.active_agents > len(expanded_agents)
+        ):
+            raise ValueError(
+                "active agent count exceeds the configured population of "
+                f"{len(expanded_agents)}"
+            )
         for agent in expanded_agents:
             if agent.model_ref not in self.models:
                 raise ValueError(
@@ -329,6 +339,13 @@ class ScenarioConfig(StrictModel):
             )
         return tuple(sorted(expanded, key=lambda agent: agent.id))
 
+    def active_agents(self) -> tuple[ResolvedAgentConfig, ...]:
+        """Return the validated active prefix of the configured population."""
+
+        expanded = self.expand_agents()
+        count = self.run.active_agents
+        return expanded if count is None else expanded[:count]
+
     def normalized_data(self) -> dict[str, object]:
         """Return a JSON-compatible, deterministically ordered representation."""
 
@@ -354,6 +371,7 @@ class ScenarioConfig(StrictModel):
             agent.model_dump(mode="json", exclude_none=True)
             for agent in self.expand_agents()
         ]
+        raw["active_agent_ids"] = [agent.id for agent in self.active_agents()]
         return cast(
             dict[str, object],
             json.loads(json.dumps(raw, sort_keys=True, separators=(",", ":"))),

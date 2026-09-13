@@ -77,6 +77,15 @@ OpenAI-compatible adapter uses cancellable asyncio HTTP connections, so timeout 
 task cancellation closes the in-flight socket instead of leaving worker-thread
 requests running.
 
+Live terminal presentation is an adapter over that post-commit event boundary.
+It subscribes only to applied, rejected, no-op, and cognition-failure events and
+renders plain flushed lines without ANSI control. Model text is made single-line
+and control characters are neutralized. Lifecycle callbacks render separately
+marked waiting and thinking status; they are never persisted as simulation
+events. If output fails after a commit, the observer records the failure and the
+continuous runner stops after that batch without invoking the committed step
+again.
+
 ## Core Contracts
 
 These signatures describe boundaries, not inheritance-heavy base classes. Concrete types may use frozen dataclasses and `typing.Protocol`.
@@ -152,6 +161,7 @@ Scenarios are authored as YAML 1.2, loaded without executable tags, and validate
 The versioned `ScenarioConfig` contains:
 
 - A master seed, run limits, and engine settings
+- An optional validated active-agent prefix, bounded to 1–10 for M2-04
 - Named provider connections and named model configurations
 - Explicit agents and deterministically expanded agent pools
 - Personality references and per-agent or per-pool model references

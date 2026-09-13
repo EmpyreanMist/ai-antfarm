@@ -25,11 +25,12 @@ The foundation currently includes:
 - Opt-in public speech with authenticated senders and next-tick visibility
 - Bounded public rosters, message history, and per-agent retained memory
 - Paced continuous execution with atomic cancellation and bounded live event buffers
+- Plain live terminal rendering of committed speech, actions, rejections, and failures
+- Validated live societies of 1–10 distinct agents over shared model configurations
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, and M2-01 through M2-03 are complete. The next milestone adds
-live rendering of committed society events. See [the roadmap](docs/ROADMAP.md)
-for current progress.
+M0, M1-01/M1-02, and M2-01 through M2-04 are complete. See
+[the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Quick Start
 
@@ -159,8 +160,8 @@ The social run allows each cognition to choose one `say`, `harvest`,
 `contribute`, or no-op decision. Accepted speech is included in later requests as
 untrusted simulation data; it cannot add tools, forge its sender, or bypass action
 validation. Exact dialogue and physical actions vary with the model. This M2-02
-scenario is finite and prints its summary after completion; continuous execution
-and live per-event rendering are later roadmap milestones.
+scenario remains finite and prints its summary after completion unless live and
+continuous options are explicitly requested.
 
 The checked-in Qwen configuration uses the OpenAI-compatible
 `reasoning_effort: none` field, temperature `0`, a fixed seed, and a bounded
@@ -177,86 +178,150 @@ action, and no unintended world-state mutation. The small model's dialogue was
 simplistic and sometimes self-referential, but that is a model-quality limitation,
 not a failure of the social action or structured-output pipeline.
 
-## Run Continuously and Stop Safely
+## Run a Live Society and Stop Safely
 
-Continuous mode is explicit; scenarios remain finite unless `--continuous` is
-passed. The included mock and Ollama examples use staggered three-tick cadence,
-one cognition per tick, capped failure retry cooldowns, bounded live buffers, and
-SQLite checkpoints:
+Live mode is explicit and requires continuous mode. Loading any existing scenario
+without both options remains finite and uses `run.ticks`. The live examples define
+ten distinct identities, default `run.active_agents` to three, stagger cognition,
+and allow one model invocation per tick. `--agents N` revalidates and selects the
+first 1–10 configured identities; 0, values above 10, or counts larger than the
+configured population fail clearly.
 
-```console
-uv run antfarm validate scenarios/examples/continuous-social-mock.yaml
-uv run antfarm run scenarios/examples/continuous-social-mock.yaml --continuous --tick-seconds 1
-
-uv run antfarm validate scenarios/examples/continuous-social-ollama.yaml
-uv run antfarm run scenarios/examples/continuous-social-ollama.yaml --continuous --tick-seconds 1
-```
-
-Press Ctrl+C during either run. AntFarm stops scheduling cognition, cancels an
-in-flight HTTP request by closing its connection, discards any uncommitted step,
-closes provider/storage resources, and reports the last committed tick. A step
-that is already committing finishes atomically. Continuous mode does not retain
-all event batches in memory; the configured event bus window is bounded and the
-SQLite event log remains complete.
-
-The example database and run ID are intentionally fixed for inspectability. Before
-repeating a run, remove its generated `.db` file or copy the scenario and choose a
-fresh `run.id` and storage path. Full live dialogue rendering is M2-04; M2-03 emits
-lifecycle and final checkpoint status only.
-
-Inspect the final continuous checkpoint from the repository root:
+Paced execution without live event rendering remains available independently:
 
 ```powershell
+uv run antfarm run scenarios/examples/continuous-social-mock.yaml `
+  --continuous `
+  --tick-seconds 1
+```
+
+The mock path is the complete offline demonstration:
+
+```powershell
+Set-Location C:\Programmering\ai-antfarm
+uv run antfarm validate scenarios/examples/live-social-mock.yaml
+uv run antfarm inspect scenarios/examples/live-social-mock.yaml
+uv run antfarm run scenarios/examples/live-social-mock.yaml `
+  --live `
+  --continuous `
+  --agents 3 `
+  --tick-seconds 1
+```
+
+Live runs allocate a fresh run ID automatically, so repeated runs append distinct
+runs to the example SQLite database instead of overwriting a durable run. Startup
+shows the run ID, active identities, provider/model assignments, cognition budget,
+cadence, database, and Ctrl+C instruction. `[status]` lines describe startup,
+waiting, thinking, and stopping. `[event tick N]` lines are committed simulation
+events only. Output is flushed plain text, works when redirected, and neutralizes
+terminal control characters in model text.
+
+### Exact Ollama workflow for Windows and VS Code PowerShell
+
+Check whether Ollama is available and serving:
+
+```powershell
+ollama --version
+Get-Process ollama -ErrorAction SilentlyContinue
+Invoke-RestMethod http://localhost:11434/api/tags
+```
+
+If the request fails and the desktop application is not already serving, start it
+in a dedicated VS Code PowerShell terminal and leave that terminal open:
+
+```powershell
+ollama serve
+```
+
+In a second VS Code PowerShell terminal, list and download models, then validate
+and inspect the scenario. Validation and inspection do not contact Ollama:
+
+```powershell
+Set-Location C:\Programmering\ai-antfarm
+ollama list
+ollama pull qwen3.5:0.8b
+ollama list
+uv run antfarm validate scenarios/examples/live-social-ollama.yaml
+uv run antfarm inspect scenarios/examples/live-social-ollama.yaml
+```
+
+Start the default three-agent society:
+
+```powershell
+uv run antfarm run scenarios/examples/live-social-ollama.yaml `
+  --live `
+  --continuous `
+  --agents 3 `
+  --tick-seconds 1
+```
+
+Start the maximum M2-04 population with the same configuration:
+
+```powershell
+uv run antfarm run scenarios/examples/live-social-ollama.yaml `
+  --live `
+  --continuous `
+  --agents 10 `
+  --tick-seconds 1
+```
+
+Press Ctrl+C once to stop. AntFarm starts no further cognition, cancels an
+in-flight HTTP request, restores any uncommitted step, closes providers and
+storage, and prints the last committed tick, active count, final world, final
+metrics, and database location. A slow response may make a tick exceed one second;
+steps never overlap and no catch-up burst is launched.
+
+Copy the exact `run=` value printed in the live header, then inspect its checkpoint:
+
+```powershell
+$env:ANTFARM_RUN_ID = "live-social-ollama-PASTE-THE-PRINTED-SUFFIX"
 @'
+import os
 from antfarm.adapters.storage import SQLiteStorage
 from antfarm.domain import RunId
 
-with SQLiteStorage("continuous-social-ollama.db") as storage:
-    checkpoint = storage.load_latest(RunId("continuous-social-ollama"))
-    if checkpoint is not None:
-        print("tick", checkpoint.snapshot.tick)
-        print("world", dict(checkpoint.snapshot.world))
-        print("scheduler", dict(checkpoint.snapshot.scheduler))
+with SQLiteStorage("live-social-ollama.db") as storage:
+    checkpoint = storage.load_latest(RunId(os.environ["ANTFARM_RUN_ID"]))
+    if checkpoint is None:
+        raise SystemExit("checkpoint not found")
+    print("tick", checkpoint.snapshot.tick)
+    print("world", dict(checkpoint.snapshot.world))
+    print("metrics", dict(checkpoint.snapshot.metrics))
 '@ | uv run python -
 ```
 
-If Ollama becomes unavailable, cognition failures commit without action effects
-and retries back off deterministically up to the configured cap. Healthy agents
-continue receiving their fair share of the per-tick budget. A storage failure
-stops the run after restoring the previous complete checkpoint.
+The default ten-agent configuration points every agent at `qwen-local`, so one
+Ollama runtime and one model configuration serve the whole society. It does not
+create a model process per agent. To test mixed assignments, first run
+`ollama pull llama3.2:1b`, then change selected agents such as Heidi, Ivan, and
+Judy to `model_ref: optional-second-local` in a copied scenario. Run with
+`--agents 10`; the remaining agents continue using `qwen-local`. A model tag alone
+does not guarantee compatibility with the installed runtime.
 
-To route only Charlie to a second local model, first pull that model, then copy the
-`qwen-local` entry under `models` to a new key, change its `model` tag, and set
-Charlie's `model_ref` to the new key. This creates one provider adapter per used
-model reference; it does not create a process per agent. Ollama controls loading
-and memory residency, and multiple models need not stay resident at once.
+If a model is missing, compare the YAML `models.*.model` values with `ollama list`,
+run the matching `ollama pull <tag>`, and start a fresh live run. If Ollama is
+unavailable, run `Invoke-RestMethod http://localhost:11434/api/tags`, start
+`ollama serve`, and retry. During an outage, committed `cognition.failed` or
+`cognition.timed_out` events have no action effect and deterministic retry cooldowns
+avoid a tight loop. Increase `timeout_seconds` for a slow cold start. AntFarm does
+not install or manage Ollama automatically.
 
-If the configured model name does not match `ollama list`, Ollama is stopped, or a
-request exceeds `timeout_seconds`, the run exits non-zero after recording bounded
-`cognition.failed` or `cognition.timed_out` events. No proposed action from that
-failed decision changes the world. Increase `timeout_seconds` for slower cold
-starts. Validation and inspection remain offline and do not contact Ollama.
+### Manual M2-04 smoke test
 
-To inspect durable speech, copy either social scenario, change its storage block
-to a unique local database path, run it once, and then use this PowerShell snippet
-from the repository root:
+Record `ollama --version`, the exact model tags from `ollama list`, GPU/runtime
+details, and the date after testing. Verify without requiring exact wording that:
 
-```powershell
-@'
-from antfarm.adapters.storage import SQLiteStorage
-from antfarm.domain import RunId
+- several agents act without prompts and later agents react to prior public speech;
+- identities, personalities, private recall, and holdings remain distinct;
+- both 3-agent and 10-agent runs involve exactly the selected identities;
+- one shared model serves multiple agents, then selected agents use the optional
+  second model while the remainder keep the default;
+- harvest and contribute are applied only when environment validation accepts them;
+- Ctrl+C reports a checkpoint matching the last complete committed tick;
+- a stopped Ollama runtime and a missing model produce clean bounded failures.
 
-with SQLiteStorage("social-runs.db") as storage:
-    for event in storage.read_events(RunId("social-mock")):
-        if event.kind == "action.applied" and event.payload.get("kind") == "say":
-            print(event.payload["message"])
-'@ | uv run python -
-```
-
-Set the `RunId` and database filename to the values in the copied scenario. Expect
-one line per accepted message, including its stable ID, authenticated sender,
-tick, and text. Use a fresh run ID or database path for another run because run
-IDs are unique within a database.
+Real Ollama, GPU, latency, dialogue-quality, model-compatibility, and interactive
+Ctrl+C testing are manual acceptance work and are not part of the offline suite.
 
 ## Development Checks
 

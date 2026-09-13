@@ -274,11 +274,11 @@ complete state, observer failures are isolated after commit, the live event wind
 
 is bounded, and cancellable asyncio HTTP transport closes in-flight connections.
 
-The remaining interactive gap is M2-04's terminal rendering of committed actions
+M2-04 completes the interactive target with plain live rendering of committed
 
-and speech. Continuous M2-03 runs intentionally report lifecycle and final
+actions and speech, separately marked lifecycle status, validated 1–10 agent
 
-checkpoint status without presenting dialogue as it occurs.
+selection, fresh durable live-run IDs, and safe output-failure handling.
 
 M1-03 comparison and M1-04 replay move later, retaining their identifiers and scope
 
@@ -326,9 +326,11 @@ unless explicitly requested otherwise.
 
   cancellable stopping are implemented.
 
-- **M2-04 — Next:** stream committed society events in the terminal and verify
+- **M2-04 — Complete:** committed society events stream in the terminal; live
 
-  the complete local-AI experience.
+  runs support 1–10 distinct agents over shared model configurations, fresh run
+
+  IDs, safe output failure, and durable stop summaries.
 
 ### M2-01: Distinct Agents Using Shared Local Model Backends — Complete
 
@@ -597,7 +599,7 @@ Ollama during a run and confirm bounded retries and safe termination. This step
 
 provides lifecycle/status output; full dialogue display follows in M2-04.
 
-### M2-04: Live Terminal Society and Local-AI Acceptance — Planned
+### M2-04: Live Terminal Society and Local-AI Acceptance — Complete
 
 **Purpose:** complete the first interactive experience: watch several local agents
 
@@ -719,9 +721,7 @@ and Ollama scenarios. **First live multi-agent conversation:** M2-04. No
 
 additional infrastructure is scheduled beyond this target.
 
-The following is the **proposed final interface**, not a claim that the new file
-
-or CLI options already exist. Real Ollama compatibility is verified manually by
+The following is the implemented interface. Real Ollama compatibility is verified manually by
 
 the user against the installed Ollama release; the tag below matches the existing
 
@@ -747,15 +747,16 @@ uv sync --dev
 
 ollama pull qwen3.5:0.8b
 
-uv run antfarm validate scenarios/examples/social-ollama.yaml
+uv run antfarm validate scenarios/examples/live-social-ollama.yaml
 
-uv run antfarm inspect scenarios/examples/social-ollama.yaml
+uv run antfarm inspect scenarios/examples/live-social-ollama.yaml
 
-uv run antfarm run scenarios/examples/social-ollama.yaml --live --continuous --tick-seconds 1
+uv run antfarm run scenarios/examples/live-social-ollama.yaml --live --continuous --agents 3 --tick-seconds 1
 
 ```
 
-The proposed scenario assigns Alice, Bob, and Charlie different personalities but
+The scenario configures ten identities, defaults the active prefix to Alice, Bob,
+and Charlie, and assigns them different personalities but
 
 the same model reference and `http://localhost:11434/v1` provider. It selects the
 
