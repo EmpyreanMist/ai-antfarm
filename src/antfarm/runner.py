@@ -8,13 +8,14 @@ from types import MappingProxyType
 from typing import TextIO, cast
 from uuid import uuid4
 
+from antfarm.adapters.models.ollama import OllamaModelPreflight
 from antfarm.adapters.terminal import LiveTerminalObserver, checkpoint_location
 from antfarm.application.continuous import ContinuousRunner, PacingClock
 from antfarm.composition import compose
 from antfarm.config import load_scenario
-from antfarm.config.schema import ScenarioConfig
+from antfarm.config.schema import OpenAICompatibleProviderConfig, ScenarioConfig
 from antfarm.domain.json_values import JsonObject
-from antfarm.domain.models import Event, RunLimit
+from antfarm.domain.models import AgentId, Event, RunLimit, Tick
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +76,7 @@ def prepare_live_config(
     path: str | Path,
     *,
     active_agents: int | None = None,
+    model: str | None = None,
     run_id: str | None = None,
 ) -> ScenarioConfig:
     """Apply live-only overrides and revalidate the complete scenario."""
@@ -87,6 +89,22 @@ def prepare_live_config(
         selected_count = source.run.active_agents or len(source.expand_agents())
     run["active_agents"] = selected_count
     run["id"] = run_id or _fresh_run_id(source.run.id)
+    if model is not None:
+        _validate_runtime_model(model)
+        provisional = ScenarioConfig.model_validate(data)
+        active_model_refs = {
+            agent.model_ref for agent in provisional.active_agents()
+        }
+        models = cast(dict[str, dict[str, object]], data["models"])
+        for model_ref in active_model_refs:
+            model_config = provisional.models[model_ref]
+            provider = provisional.providers[model_config.provider_ref]
+            if not isinstance(provider, OpenAICompatibleProviderConfig):
+                raise ValueError(
+                    "runtime model override requires OpenAI-compatible "
+                    f"active models; {model_ref!r} uses {provider.kind!r}"
+                )
+            models[model_ref]["model"] = model
     return ScenarioConfig.model_validate(data)
 
 
@@ -96,6 +114,8 @@ async def run_live_scenario(
     tick_seconds: float,
     output: TextIO,
     active_agents: int | None = None,
+    model: str | None = None,
+    verbose: bool = False,
     run_id: str | None = None,
     clock: PacingClock | None = None,
     should_stop: Callable[[], bool] | None = None,
@@ -103,10 +123,31 @@ async def run_live_scenario(
     """Run a live society and render committed events without retaining batches."""
 
     config = prepare_live_config(
-        path, active_agents=active_agents, run_id=run_id
+        path, active_agents=active_agents, model=model, run_id=run_id
     )
-    terminal = LiveTerminalObserver(output)
-    simulation = compose(config, on_cognition_started=terminal.thinking)
+    await _preflight_ollama(config)
+    terminal = LiveTerminalObserver(output, verbose=verbose)
+
+    def cognition_started(tick: Tick, agent_id: AgentId, model_ref: str) -> None:
+        resolved = config.models[model_ref]
+        provider = config.providers[resolved.provider_ref]
+        backend = (
+            "Ollama"
+            if getattr(provider, "runtime", None) == "ollama"
+            else provider.kind
+        )
+        terminal.thinking(
+            tick,
+            agent_id,
+            model_ref,
+            backend,
+            resolved.model,
+        )
+
+    simulation = compose(
+        config,
+        on_cognition_started=cognition_started if verbose else None,
+    )
     subscription = simulation.event_bus.subscribe(
         terminal.event_kinds, terminal.observe
     )
@@ -123,7 +164,7 @@ async def run_live_scenario(
             clock=clock,
             on_batch=batch_completed,
             should_stop=should_stop,
-            on_waiting=terminal.waiting,
+            on_waiting=terminal.waiting if verbose else None,
         ).run()
         summary = RunSummary(
             run_id=config.run.id,
@@ -150,3 +191,29 @@ async def run_live_scenario(
 def _fresh_run_id(base: str) -> str:
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
     return f"{base}-{timestamp}-{uuid4().hex[:8]}"
+
+
+def _validate_runtime_model(model: str) -> None:
+    if not model or model != model.strip():
+        raise ValueError("runtime model must be a non-empty trimmed value")
+    if any(ord(character) < 32 or 127 <= ord(character) <= 159 for character in model):
+        raise ValueError("runtime model must not contain control characters")
+
+
+async def _preflight_ollama(config: ScenarioConfig) -> None:
+    grouped: dict[str, set[str]] = {}
+    for agent in config.active_agents():
+        model = config.models[agent.model_ref]
+        provider = config.providers[model.provider_ref]
+        if (
+            isinstance(provider, OpenAICompatibleProviderConfig)
+            and provider.runtime == "ollama"
+        ):
+            grouped.setdefault(model.provider_ref, set()).add(model.model)
+    for provider_ref in sorted(grouped):
+        provider = config.providers[provider_ref]
+        if not isinstance(provider, OpenAICompatibleProviderConfig):
+            raise TypeError("Ollama preflight requires an OpenAI-compatible provider")
+        await OllamaModelPreflight(base_url=provider.base_url).ensure_available(
+            sorted(grouped[provider_ref])
+        )

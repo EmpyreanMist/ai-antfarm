@@ -80,11 +80,18 @@ requests running.
 Live terminal presentation is an adapter over that post-commit event boundary.
 It subscribes only to applied, rejected, no-op, and cognition-failure events and
 renders plain flushed lines without ANSI control. Model text is made single-line
-and control characters are neutralized. Lifecycle callbacks render separately
-marked waiting and thinking status; they are never persisted as simulation
-events. If output fails after a commit, the observer records the failure and the
-continuous runner stops after that batch without invoking the committed step
-again.
+and control characters are neutralized. Normal mode omits cognition-start and
+waiting lines; explicit verbose mode renders those lifecycle callbacks as marked
+status that is never persisted. If output fails after a commit, the observer
+records the failure and the continuous runner stops after that batch without
+invoking the committed step again.
+
+A live-only model override produces a newly validated in-memory scenario for the
+run and changes the concrete model on active model references without rewriting
+YAML or changing provider settings. Providers marked with the `ollama` runtime are
+checked through the adapter's `/api/tags` preflight before composition creates a
+durable run. Domain, scheduler, event, and persistence contracts remain unaware of
+Ollama.
 
 ## Core Contracts
 

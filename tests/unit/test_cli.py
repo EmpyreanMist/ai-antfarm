@@ -104,11 +104,15 @@ def test_live_run_forwards_agent_count_and_owns_its_output(
         *,
         tick_seconds: float,
         active_agents: int | None,
+        model: str | None,
+        verbose: bool,
         output: object,
     ) -> RunSummary:
         del path
         assert tick_seconds == 0.25
         assert active_agents == 7
+        assert model == "gemma4:e2b"
+        assert verbose is True
         assert output is sys.stdout
         print("live output")
         return RunSummary("fresh-live", 2, {"resource": 3}, ())
@@ -123,6 +127,9 @@ def test_live_run_forwards_agent_count_and_owns_its_output(
             "--continuous",
             "--agents",
             "7",
+            "--model",
+            "gemma4:e2b",
+            "--verbose",
             "--tick-seconds",
             "0.25",
         ]
@@ -139,3 +146,39 @@ def test_live_flags_require_explicit_continuous_mode(
 
     assert result == 2
     assert "--live requires --continuous" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["--model", "gemma4:e2b"], "--model requires --live"),
+        (["--verbose"], "--verbose requires --live"),
+    ],
+)
+def test_live_only_options_fail_deterministically_without_live_mode(
+    arguments: list[str],
+    message: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = cli.main(["run", "scenario.yaml", *arguments])
+
+    assert result == 2
+    assert message in capsys.readouterr().err
+
+
+def test_runtime_model_cli_value_rejects_whitespace(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        cli.build_parser().parse_args(
+            [
+                "run",
+                "scenario.yaml",
+                "--live",
+                "--continuous",
+                "--model",
+                "  ",
+            ]
+        )
+
+    assert "non-empty trimmed value" in capsys.readouterr().err

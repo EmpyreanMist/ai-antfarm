@@ -183,6 +183,23 @@ def test_complete_schema_represents_deferred_configuration() -> None:
     )
 
 
+def test_openai_compatible_runtime_hint_is_closed_and_validated() -> None:
+    data = _valid_data()
+    data["providers"] = {
+        "local": {
+            "kind": "openai_compatible",
+            "base_url": "http://localhost:11434/v1",
+            "runtime": "not-ollama",
+        }
+    }
+    data["models"] = {
+        "deterministic": {"provider_ref": "local", "model": "test"}
+    }
+
+    with pytest.raises(ValidationError, match="runtime"):
+        ScenarioConfig.model_validate(data)
+
+
 def test_normalized_json_is_canonical_and_contains_expanded_agents() -> None:
     data = _valid_data()
     data["agents"] = []

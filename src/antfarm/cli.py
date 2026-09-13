@@ -34,6 +34,14 @@ def _active_agent_count(value: str) -> int:
     return parsed
 
 
+def _model_name(value: str) -> str:
+    if not value or value != value.strip():
+        raise argparse.ArgumentTypeError("must be a non-empty trimmed value")
+    if any(ord(character) < 32 or 127 <= ord(character) <= 159 for character in value):
+        raise argparse.ArgumentTypeError("must not contain control characters")
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="antfarm")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -45,6 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--continuous", action="store_true")
     run.add_argument("--live", action="store_true")
     run.add_argument("--agents", type=_active_agent_count)
+    run.add_argument("--model", type=_model_name)
+    run.add_argument("--verbose", action="store_true")
     run.add_argument("--tick-seconds", type=_positive_float, default=1.0)
     return parser
 
@@ -64,12 +74,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise ValueError("--live requires --continuous")
         if args.agents is not None and not args.live:
             raise ValueError("--agents requires --live")
+        if args.model is not None and not args.live:
+            raise ValueError("--model requires --live")
+        if args.verbose and not args.live:
+            raise ValueError("--verbose requires --live")
         if args.live:
             asyncio.run(
                 run_live_scenario(
                     args.scenario,
                     tick_seconds=args.tick_seconds,
                     active_agents=args.agents,
+                    model=args.model,
+                    verbose=args.verbose,
                     output=sys.stdout,
                 )
             )

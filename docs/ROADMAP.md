@@ -332,6 +332,14 @@ unless explicitly requested otherwise.
 
   IDs, safe output failure, and durable stop summaries.
 
+- **M2-05 — Complete:** live runs accept an ephemeral concrete-model override,
+
+  preflight Ollama model availability, show resolved runtime details, and keep
+
+  normal terminal output focused on committed society activity while verbose mode
+
+  retains operational status.
+
 ### M2-01: Distinct Agents Using Shared Local Model Backends — Complete
 
 **Purpose:** make the existing local-provider path represent distinct agents with
@@ -799,3 +807,27 @@ scheduled decisions. Ctrl+C ends the run with a consistent checkpoint.
 local AI agents that autonomously act and talk to each other live in a shared
 
 simulation.
+
+### M2-05: Runtime Model Selection and Live Terminal UX — Complete
+
+**Purpose:** make local live-society experiments easy to switch and easy to read
+without weakening the M2-04 simulation boundary.
+
+The live CLI accepts `--model` as an ephemeral global override for the concrete
+model used by active OpenAI-compatible model references. The complete transformed
+scenario is validated in memory and the source YAML remains unchanged. Omitting
+the option preserves scenario behavior. Per-agent CLI overrides remain deferred;
+the transformation at named model references leaves room for derived references
+in a later mixed-model milestone.
+
+The role-named `local-model` reference replaces model-specific naming in the
+generic Ollama example. Providers explicitly marked with `runtime: ollama` receive
+an adapter-level `/api/tags` preflight before run creation, with installed models
+and the exact `ollama pull` command reported for a missing tag. No fallback or
+automatic installation occurs.
+
+Normal live output shows the resolved backend/model, committed society events,
+failures, and final summary without permanent cognition status. `--verbose`
+restores marked thinking, waiting, and internal reference details. Plain output,
+sanitization, broken-stream handling, atomic commits, safe cancellation, fresh run
+IDs, and finite defaults retain their M2-04 behavior.

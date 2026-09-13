@@ -8,8 +8,9 @@ providers:
   local-ollama:
     kind: openai_compatible
     base_url: http://localhost:11434/v1
+    runtime: ollama
 models:
-  qwen-local:
+  local-model:
     provider_ref: local-ollama
     model: qwen3.5:0.8b
     timeout_seconds: 180
@@ -31,16 +32,16 @@ personalities:
   skeptical: {description: Challenge risky proposals while respecting validation.}
   watchful: {description: Monitor the common balance and discourage overuse.}
 agents:
-  - {id: alice, model_ref: qwen-local, personality_ref: cautious, cognition_interval: 10}
-  - {id: bob, model_ref: qwen-local, personality_ref: pragmatic, cognition_interval: 10}
-  - {id: charlie, model_ref: qwen-local, personality_ref: curious, cognition_interval: 10}
-  - {id: diana, model_ref: qwen-local, personality_ref: generous, cognition_interval: 10}
-  - {id: eve, model_ref: qwen-local, personality_ref: patient, cognition_interval: 10}
-  - {id: frank, model_ref: qwen-local, personality_ref: industrious, cognition_interval: 10}
-  - {id: grace, model_ref: qwen-local, personality_ref: diplomatic, cognition_interval: 10}
-  - {id: heidi, model_ref: qwen-local, personality_ref: transparent, cognition_interval: 10}
-  - {id: ivan, model_ref: qwen-local, personality_ref: skeptical, cognition_interval: 10}
-  - {id: judy, model_ref: qwen-local, personality_ref: watchful, cognition_interval: 10}
+  - {id: alice, model_ref: local-model, personality_ref: cautious, cognition_interval: 10}
+  - {id: bob, model_ref: local-model, personality_ref: pragmatic, cognition_interval: 10}
+  - {id: charlie, model_ref: local-model, personality_ref: curious, cognition_interval: 10}
+  - {id: diana, model_ref: local-model, personality_ref: generous, cognition_interval: 10}
+  - {id: eve, model_ref: local-model, personality_ref: patient, cognition_interval: 10}
+  - {id: frank, model_ref: local-model, personality_ref: industrious, cognition_interval: 10}
+  - {id: grace, model_ref: local-model, personality_ref: diplomatic, cognition_interval: 10}
+  - {id: heidi, model_ref: local-model, personality_ref: transparent, cognition_interval: 10}
+  - {id: ivan, model_ref: local-model, personality_ref: skeptical, cognition_interval: 10}
+  - {id: judy, model_ref: local-model, personality_ref: watchful, cognition_interval: 10}
 actions: [{kind: harvest}, {kind: contribute}, {kind: say}]
 environment:
   kind: commons

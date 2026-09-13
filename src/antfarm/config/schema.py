@@ -53,6 +53,7 @@ class OpenAICompatibleProviderConfig(StrictModel):
     kind: Literal["openai_compatible"]
     base_url: Annotated[str, Field(min_length=1)]
     api_key_env: EnvironmentVariable | None = None
+    runtime: Literal["ollama"] | None = None
 
 
 ProviderConfig = Annotated[

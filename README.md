@@ -27,9 +27,11 @@ The foundation currently includes:
 - Paced continuous execution with atomic cancellation and bounded live event buffers
 - Plain live terminal rendering of committed speech, actions, rejections, and failures
 - Validated live societies of 1–10 distinct agents over shared model configurations
+- Ephemeral `--model` selection with Ollama availability preflight
+- Quiet society-first output plus explicit `--verbose` lifecycle diagnostics
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, and M2-01 through M2-04 are complete. See
+M0, M1-01/M1-02, and M2-01 through M2-05 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Quick Start
@@ -211,9 +213,10 @@ uv run antfarm run scenarios/examples/live-social-mock.yaml `
 Live runs allocate a fresh run ID automatically, so repeated runs append distinct
 runs to the example SQLite database instead of overwriting a durable run. Startup
 shows the run ID, active identities, provider/model assignments, cognition budget,
-cadence, database, and Ctrl+C instruction. `[status]` lines describe startup,
-waiting, thinking, and stopping. `[event tick N]` lines are committed simulation
-events only. Output is flushed plain text, works when redirected, and neutralizes
+cadence, database, and Ctrl+C instruction. Normal output contains committed
+`[tick N]` society activity without permanent thinking/waiting lines. Add
+`--verbose` for separately marked operational status and internal configuration
+references. Output is flushed plain text, works when redirected, and neutralizes
 terminal control characters in model text.
 
 ### Exact Ollama workflow for Windows and VS Code PowerShell
@@ -239,7 +242,7 @@ and inspect the scenario. Validation and inspection do not contact Ollama:
 ```powershell
 Set-Location C:\Programmering\ai-antfarm
 ollama list
-ollama pull qwen3.5:0.8b
+ollama pull gemma4:e2b
 ollama list
 uv run antfarm validate scenarios/examples/live-social-ollama.yaml
 uv run antfarm inspect scenarios/examples/live-social-ollama.yaml
@@ -252,7 +255,33 @@ uv run antfarm run scenarios/examples/live-social-ollama.yaml `
   --live `
   --continuous `
   --agents 3 `
+  --model gemma4:e2b `
   --tick-seconds 1
+```
+
+Switch the concrete model for another run without editing the scenario:
+
+```powershell
+--model qwen3.5:0.8b
+--model gemma4:e4b
+```
+
+The selected tag replaces the concrete model on every model configuration used by
+the active agents for that run only. Provider URL, structured-output behavior,
+timeout, and generation parameters still come from the validated scenario. The
+scenario file is never rewritten. Omitting `--model` uses its configured default.
+Runtime override is currently global; per-agent CLI model assignment is deferred.
+
+To include cognition and pacing diagnostics, add verbose mode:
+
+```powershell
+uv run antfarm run scenarios/examples/live-social-ollama.yaml `
+  --live `
+  --continuous `
+  --agents 3 `
+  --model gemma4:e2b `
+  --tick-seconds 1 `
+  --verbose
 ```
 
 Start the maximum M2-04 population with the same configuration:
@@ -262,6 +291,7 @@ uv run antfarm run scenarios/examples/live-social-ollama.yaml `
   --live `
   --continuous `
   --agents 10 `
+  --model gemma4:e2b `
   --tick-seconds 1
 ```
 
@@ -271,7 +301,8 @@ storage, and prints the last committed tick, active count, final world, final
 metrics, and database location. A slow response may make a tick exceed one second;
 steps never overlap and no catch-up burst is launched.
 
-Copy the exact `run=` value printed in the live header, then inspect its checkpoint:
+Copy the exact value on the `Run` line in the live header, then inspect its
+checkpoint:
 
 ```powershell
 $env:ANTFARM_RUN_ID = "live-social-ollama-PASTE-THE-PRINTED-SUFFIX"
@@ -290,23 +321,25 @@ with SQLiteStorage("live-social-ollama.db") as storage:
 '@ | uv run python -
 ```
 
-The default ten-agent configuration points every agent at `qwen-local`, so one
-Ollama runtime and one model configuration serve the whole society. It does not
+The default ten-agent configuration points every agent at the role-named
+`local-model` reference, so one Ollama runtime and one model configuration serve
+the whole society. It does not
 create a model process per agent. To test mixed assignments, first run
 `ollama pull llama3.2:1b`, then change selected agents such as Heidi, Ivan, and
 Judy to `model_ref: optional-second-local` in a copied scenario. Run with
-`--agents 10`; the remaining agents continue using `qwen-local`. A model tag alone
+`--agents 10`; the remaining agents continue using `local-model`. A model tag alone
 does not guarantee compatibility with the installed runtime.
 
 If a model is missing, compare the YAML `models.*.model` values with `ollama list`,
-run the matching `ollama pull <tag>`, and start a fresh live run. If Ollama is
-unavailable, run `Invoke-RestMethod http://localhost:11434/api/tags`, start
-`ollama serve`, and retry. During an outage, committed `cognition.failed` or
-`cognition.timed_out` events have no action effect and deterministic retry cooldowns
-avoid a tight loop. Increase `timeout_seconds` for a slow cold start. AntFarm does
-not install or manage Ollama automatically.
+or compare the value passed to `--model`, run the matching `ollama pull <tag>`,
+and start a fresh live run. The live command checks Ollama's `/api/tags` inventory
+before creating the run and prints installed tags plus the exact pull command when
+the selection is missing. If Ollama is unavailable, start `ollama serve` and retry.
+There is no fallback and AntFarm never installs models automatically. Failures
+after startup remain committed cognition failure events with no action effect;
+retry cooldowns avoid a tight loop.
 
-### Manual M2-04 smoke test
+### Manual live-society smoke test
 
 Record `ollama --version`, the exact model tags from `ollama list`, GPU/runtime
 details, and the date after testing. Verify without requiring exact wording that:
