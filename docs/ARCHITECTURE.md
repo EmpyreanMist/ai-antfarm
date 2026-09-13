@@ -2,9 +2,60 @@
 
 ## Context and Boundaries
 
-AntFarm AI uses a ports-and-adapters architecture. The domain owns simulation concepts; the application layer coordinates them; adapters handle model APIs, memory implementations, persistence, and future transports. Imports point inward: domain code must not import adapters, databases, HTTP clients, OASIS, CAMEL, or provider SDKs.
+AntFarm AI uses a ports-and-adapters architecture. The domain owns simulation
+concepts; the application layer exposes transport-neutral simulation use cases;
+adapters handle model APIs, memory implementations, persistence, presentation,
+and transports. Imports point inward: domain code must not import adapters,
+databases, HTTP clients, OASIS, CAMEL, provider SDKs, CLI code, or frontend code.
 
-The current execution topology is one Python 3.12+ process with one simulation engine and one SQLite writer. The public surface is an installable library plus a small CLI. REST, WebSockets, UI code, distributed workers, and dynamic plugin discovery remain outside the current milestone.
+The current execution topology is one Python 3.12+ process with one simulation
+engine and one SQLite writer. The public surface is an installable library plus a
+small CLI. The next milestone strengthens rich agent configuration and the shared
+application/service layer; HTTP, WebSockets, and the Next.js frontend follow only
+after those use cases are stable. Distributed workers and dynamic plugin discovery
+remain deferred.
+
+## Target Application Topology
+
+```text
+CLI -----------------+
+                     |
+Next.js -> HTTP/WebSocket API -> AntFarm application layer -> core/domain
+                     |
+Tests ---------------+
+```
+
+The arrows represent calls toward shared behavior, not imports from the core into
+outer layers. The CLI and HTTP/WebSocket adapters invoke the same application
+services, and tests can exercise those services directly. The Next.js control
+plane communicates through the network API. It must never spawn the CLI or parse
+terminal output to control or inspect a simulation.
+
+The intended boundaries are:
+
+- **Domain/core simulation:** immutable agent and profile values, simulation time,
+  environments, observations, validated actions, events, and rules. It owns no
+  transport, persistence implementation, UI model, or provider wire format.
+- **Application/service layer:** scenario loading and resolution, runtime override
+  handling, population inspection, run lifecycle orchestration, queries, and
+  transport-neutral result/event DTOs. It is the single entry point for equivalent
+  CLI, API, and test behavior.
+- **Adapters/providers:** translate external model and framework protocols into
+  AntFarm ports. Provider-specific configuration and response types stay here.
+- **Persistence:** implements durable run metadata, resolved configuration,
+  checkpoints, and ordered events behind storage ports. Persistence does not own
+  simulation decisions or expose database records directly as API contracts.
+- **CLI:** parses terminal arguments, calls application services, and renders
+  service results and committed events. It contains no alternative simulation
+  workflow.
+- **HTTP/WebSocket API:** a future transport adapter for application commands,
+  queries, and committed-event streaming. HTTP handles bounded control/query
+  operations; WebSockets carry live updates where required. Transport concerns
+  such as authentication, serialization, and connection lifecycle remain outside
+  the domain.
+- **Next.js frontend:** a future presentation client for configuring, inspecting,
+  starting, stopping, and observing societies through the API. Frontend state is
+  not authoritative simulation state.
 
 ## Simulation Lifecycle
 
@@ -178,6 +229,22 @@ The versioned `ScenarioConfig` contains:
 
 Provider secrets are never embedded in scenarios. Configuration refers to environment-variable names. Component kinds resolve through a closed registry in the composition root; scenario files cannot name arbitrary Python imports.
 
+A caller may derive a validated run configuration from a loaded scenario by
+applying ephemeral runtime choices such as a seed, population settings, profile
+edits, or model assignments. Resolution produces a complete in-memory
+configuration for inspection before composition and must not mutate or rewrite the
+source scenario file. Explicit values take precedence over generated defaults.
+When the run starts, persistence records the resolved configuration and relevant
+overrides so historical runs do not depend on regenerating data from a later
+version of the source scenario.
+
+Rich profile and population resolution belongs at the domain/application boundary:
+the domain defines validated profile, visibility, and resolved-population values;
+application services orchestrate deterministic generation and overrides. CLI,
+HTTP, and UI adapters only translate user input into those shared operations.
+Private profile data, private memory, internal state, and explicitly observable
+public data remain distinct throughout resolution and cognition context building.
+
 The built-in environment catalog currently contains the deterministic `counter`
 environment with `increment`, and the finite shared-resource `commons`
 environment with `harvest` and `contribute`. Explicit commons social configuration
@@ -214,14 +281,16 @@ OASIS is postponed. Its social-media simulation model and CAMEL-linked types wou
 ```text
 src/antfarm/
   domain/          # Immutable simulation values and contracts
-  application/     # Engine and scheduler orchestration
+  application/     # Engine, scheduler, run lifecycle, and shared use cases
   ports/           # Model, memory, event, and storage boundaries
   adapters/
     models/        # Mock and OpenAI-compatible implementations
     memory/        # Initial in-memory implementation
     storage/       # SQLite implementation
+    api/           # Future HTTP/WebSocket transport adapters
   config/          # Strict schema, YAML loader, composition registry
-  cli.py
+  cli.py            # Thin application-service client and terminal renderer
+web/                # Future Next.js control plane; API client only
 scenarios/examples/
 tests/{unit,integration,fixtures}/
 docs/adr/

@@ -2,9 +2,17 @@
 
 ## Project Structure & Module Organization
 
-Read this file and every document under `docs/` before making changes. AntFarm AI is currently implementing M2. Architecture decisions live in `docs/ARCHITECTURE.md`, milestone progress lives in `docs/ROADMAP.md`, and accepted decisions live in `docs/adr/`.
+Before making changes, read this file and inspect the documentation and implementation
+relevant to the requested work. Architecture decisions live in
+`docs/ARCHITECTURE.md`, current milestone progress lives in `docs/ROADMAP.md`,
+historical planning lives in `docs/ROADMAP_old.md`, and accepted decisions live in
+`docs/adr/`. A repository-wide reread is not required for every task.
 
-M0 will use a `src` layout: domain types in `src/antfarm/domain/`, orchestration in `application/`, stable dependency interfaces in `ports/`, and provider, memory, and persistence implementations in `adapters/`. Put example configurations in `scenarios/examples/` and mirror package areas under `tests/unit/` and `tests/integration/`.
+The project uses a `src` layout: domain types in `src/antfarm/domain/`, orchestration
+and shared services in `application/`, stable dependency interfaces in `ports/`,
+and provider, memory, persistence, and transport implementations in `adapters/`.
+Put example configurations in `scenarios/examples/` and mirror package areas under
+`tests/unit/` and `tests/integration/`.
 
 ## Build, Test, and Development Commands
 
@@ -44,12 +52,14 @@ the source of truth.
 
 When starting a new milestone:
 
-- Read only the documentation and implementation relevant to the requested milestone.
+- Understand the requested scope and the relevant architecture and accepted ADRs.
+- Inspect only the documentation and implementation relevant to the affected areas.
 - Inspect git status and recent history to understand the current repository state.
-- Do not rerun the previous milestone's full verification if it is already marked
-  complete and committed.
-- Only investigate previous work if there is concrete evidence of a regression,
+- Treat completed, committed milestones as the tested baseline. Investigate previous
+  work only when the current change touches it or there is evidence of a regression,
   inconsistency, failing test, or architectural problem.
+- Do not require a repository-wide code/documentation reread or revalidation of
+  unrelated completed work before starting.
 - Do not perform manual local runtime checks, Ollama smoke tests, GPU tests, or
   other environment-specific verification unless explicitly requested.
 - The user performs manual/local verification.
@@ -74,8 +84,9 @@ When implementation is complete:
 4. Run `git diff --check`.
 5. Review the final diff for accidental or unrelated changes.
 6. Update ROADMAP.md and other status documentation where appropriate.
-7. Commit the completed milestone with a concise conventional commit message.
-8. Attempt to push the commit to `origin/main`.
+7. Commit the completed milestone with a concise conventional commit message only
+   after the required automated checks pass.
+8. Attempt to push the verified commit to `origin/main`.
 
 If `git push` is blocked by an approval, external-data-egress guard, or other
 Codex security policy:
