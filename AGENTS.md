@@ -37,14 +37,80 @@ The engine alone mutates world state. LLMs propose actions; environments validat
 
 ## Milestone workflow
 
-At the beginning of a new session, inspect repository state, documentation,
-roadmap, ADRs, git history, and uncommitted changes before implementing work.
+Treat the repository, ROADMAP.md, accepted ADRs, and current implementation as
+the source of truth.
 
-Treat the repository as the source of truth rather than previous chat context.
+### Starting a milestone
 
-When a milestone is complete, verify it before moving forward.
+When starting a new milestone:
 
-At the end of implementation, provide exact manual verification instructions
-for Windows/VS Code, including commands and expected results.
+- Read only the documentation and implementation relevant to the requested milestone.
+- Inspect git status and recent history to understand the current repository state.
+- Do not rerun the previous milestone's full verification if it is already marked
+  complete and committed.
+- Only investigate previous work if there is concrete evidence of a regression,
+  inconsistency, failing test, or architectural problem.
+- Do not perform manual local runtime checks, Ollama smoke tests, GPU tests, or
+  other environment-specific verification unless explicitly requested.
+- The user performs manual/local verification.
 
-Do not begin a later milestone until the current milestone has passed verification.
+### During implementation
+
+- Work only on the requested milestone.
+- Follow the existing architecture and accepted ADRs.
+- Prefer focused tests for the code currently being changed.
+- Do not repeatedly run the full test suite after small changes.
+- Do not perform unrelated refactors.
+- Do not implement later roadmap milestones speculatively.
+- Add or update tests only where they provide meaningful coverage for the new behavior.
+
+### Completing a milestone
+
+When implementation is complete:
+
+1. Run the relevant automated tests for the changed functionality.
+2. Run Ruff and mypy when Python code was changed.
+3. Run the full automated test suite once at the end when appropriate.
+4. Run `git diff --check`.
+5. Review the final diff for accidental or unrelated changes.
+6. Update ROADMAP.md and other status documentation where appropriate.
+7. Commit the completed milestone with a concise conventional commit message.
+8. Attempt to push the commit to `origin/main`.
+
+If `git push` is blocked by an approval, external-data-egress guard, or other
+Codex security policy:
+
+- do not repeatedly retry;
+- do not attempt to bypass the guard;
+- leave the local commit intact;
+- report the exact `git push` command the user should run manually.
+
+Do not begin the next milestone unless explicitly requested.
+
+### Manual verification
+
+The user is responsible for:
+
+- real Ollama smoke tests;
+- local model compatibility tests;
+- GPU/performance measurements;
+- interactive/manual behavior checks;
+- other machine-specific verification.
+
+Provide concise manual test instructions when useful, but do not perform those
+tests unless explicitly requested.
+
+### Final report
+
+Keep the final report concise.
+
+Report:
+
+- what was implemented;
+- automated checks performed and their result;
+- commit hash;
+- push result;
+- exact manual push command if push was blocked;
+- anything important the user should manually test.
+
+Do not repeat large implementation summaries already present in ROADMAP.md.
