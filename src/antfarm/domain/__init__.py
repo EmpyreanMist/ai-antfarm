@@ -1,21 +1,28 @@
 """Domain-owned simulation values and contracts."""
 
+from antfarm.domain.json_values import JsonObject, JsonScalar, JsonValue
 from antfarm.domain.models import (
     ActionProposal,
     ActionResult,
     AgentContext,
     AgentId,
+    CognitionOutcome,
     Event,
     EventSequence,
     MemoryItem,
+    MemoryQuery,
     Observation,
     RunId,
+    RunLimit,
+    RunMetadata,
+    RunResult,
     SimulationSnapshot,
+    StoredCheckpoint,
     Tick,
     ValidatedAction,
     ValidationResult,
 )
-from antfarm.domain.protocols import Agent, Environment
+from antfarm.domain.protocols import Agent, Environment, RandomSource
 
 __all__ = [
     "ActionProposal",
@@ -23,13 +30,23 @@ __all__ = [
     "Agent",
     "AgentContext",
     "AgentId",
+    "CognitionOutcome",
     "Environment",
     "Event",
     "EventSequence",
     "MemoryItem",
+    "MemoryQuery",
     "Observation",
+    "JsonObject",
+    "JsonScalar",
+    "JsonValue",
+    "RandomSource",
     "RunId",
+    "RunLimit",
+    "RunMetadata",
+    "RunResult",
     "SimulationSnapshot",
+    "StoredCheckpoint",
     "Tick",
     "ValidatedAction",
     "ValidationResult",

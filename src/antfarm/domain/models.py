@@ -1,11 +1,10 @@
 """Small immutable values used by the M0.1 execution lifecycle."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
-type JsonScalar = str | int | float | bool | None
-type JsonObject = Mapping[str, JsonScalar]
+from antfarm.domain.json_values import JsonObject, freeze_object
 
 
 class AgentId(str):
@@ -36,10 +35,6 @@ class EventSequence(int):
         return super().__new__(cls, value)
 
 
-def _immutable(values: Mapping[str, JsonScalar]) -> JsonObject:
-    return MappingProxyType(dict(values))
-
-
 @dataclass(frozen=True, slots=True)
 class ActionProposal:
     actor_id: AgentId
@@ -47,7 +42,9 @@ class ActionProposal:
     parameters: JsonObject = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "parameters", _immutable(self.parameters))
+        if not self.kind:
+            raise ValueError("action proposal kind must not be empty")
+        object.__setattr__(self, "parameters", freeze_object(self.parameters))
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +54,9 @@ class ValidatedAction:
     parameters: JsonObject = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "parameters", _immutable(self.parameters))
+        if not self.kind:
+            raise ValueError("validated action kind must not be empty")
+        object.__setattr__(self, "parameters", freeze_object(self.parameters))
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +65,7 @@ class ActionResult:
     payload: JsonObject = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "payload", _immutable(self.payload))
+        object.__setattr__(self, "payload", freeze_object(self.payload))
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +75,7 @@ class Observation:
     state: JsonObject
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "state", _immutable(self.state))
+        object.__setattr__(self, "state", freeze_object(self.state))
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,13 +84,16 @@ class MemoryItem:
     content: JsonObject
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "content", _immutable(self.content))
+        object.__setattr__(self, "content", freeze_object(self.content))
 
 
 @dataclass(frozen=True, slots=True)
 class AgentContext:
     observation: Observation
     memories: Sequence[MemoryItem]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "memories", tuple(self.memories))
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,13 +119,67 @@ class Event:
     payload: JsonObject = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "payload", _immutable(self.payload))
+        if self.schema_version != 1:
+            raise ValueError("unsupported event schema version")
+        if not self.event_id or not self.kind:
+            raise ValueError("event id and kind must not be empty")
+        object.__setattr__(self, "payload", freeze_object(self.payload))
 
 
 @dataclass(frozen=True, slots=True)
 class SimulationSnapshot:
     tick: Tick
     world: JsonObject
+    memory: JsonObject = field(default_factory=lambda: MappingProxyType({}))
+    scheduler: JsonObject = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "world", _immutable(self.world))
+        object.__setattr__(self, "world", freeze_object(self.world))
+        object.__setattr__(self, "memory", freeze_object(self.memory))
+        object.__setattr__(self, "scheduler", freeze_object(self.scheduler))
+
+
+@dataclass(frozen=True, slots=True)
+class RunLimit:
+    ticks: int
+
+    def __post_init__(self) -> None:
+        if self.ticks < 1:
+            raise ValueError("run limit ticks must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class RunResult:
+    snapshot: SimulationSnapshot
+    events: Sequence[Event]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "events", tuple(self.events))
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryQuery:
+    limit: int
+
+    def __post_init__(self) -> None:
+        if self.limit < 0:
+            raise ValueError("memory query limit must not be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class CognitionOutcome:
+    agent_id: AgentId
+    tick: Tick
+    kind: str
+
+
+@dataclass(frozen=True, slots=True)
+class RunMetadata:
+    run_id: RunId
+    seed: int
+
+
+@dataclass(frozen=True, slots=True)
+class StoredCheckpoint:
+    run_id: RunId
+    snapshot: SimulationSnapshot

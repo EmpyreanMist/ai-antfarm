@@ -1,17 +1,18 @@
 """Provider-neutral model request and response boundary."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Protocol
 
-from antfarm.domain.models import (
-    AgentId,
-    JsonObject,
-    JsonScalar,
-    MemoryItem,
-    Observation,
-)
+from antfarm.domain.json_values import JsonObject, freeze_object
+from antfarm.domain.models import AgentId, MemoryItem, Observation
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCapabilities:
+    structured_output: bool
+    network_required: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,9 +28,10 @@ class ModelResponse:
     parameters: JsonObject = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
-        values: Mapping[str, JsonScalar] = self.parameters
-        object.__setattr__(self, "parameters", MappingProxyType(dict(values)))
+        object.__setattr__(self, "parameters", freeze_object(self.parameters))
 
 
 class ModelProvider(Protocol):
+    capabilities: ProviderCapabilities
+
     async def generate(self, request: ModelRequest) -> ModelResponse: ...

@@ -3,10 +3,15 @@
 from collections.abc import Mapping, Sequence
 
 from antfarm.domain.models import AgentId
-from antfarm.ports.models import ModelRequest, ModelResponse
+from antfarm.ports.models import ModelRequest, ModelResponse, ProviderCapabilities
 
 
 class MockModelProvider:
+    capabilities = ProviderCapabilities(
+        structured_output=True,
+        network_required=False,
+    )
+
     def __init__(
         self,
         decisions: Mapping[AgentId, Sequence[ModelResponse | Exception]],

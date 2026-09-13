@@ -5,7 +5,8 @@ from pathlib import Path
 
 from antfarm.composition import compose
 from antfarm.config import load_scenario
-from antfarm.domain.models import Event, JsonObject
+from antfarm.domain.json_values import JsonObject
+from antfarm.domain.models import Event, RunLimit
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,13 +20,10 @@ class RunSummary:
 async def run_scenario(path: str | Path) -> RunSummary:
     config = load_scenario(path)
     simulation = compose(config)
-    events: list[Event] = []
-    for _ in range(config.run.ticks):
-        result = await simulation.engine.step()
-        events.extend(result.events)
+    result = await simulation.engine.run(RunLimit(ticks=config.run.ticks))
     return RunSummary(
         run_id=config.run.id,
         ticks=config.run.ticks,
-        final_state=simulation.engine.snapshot().world,
-        events=tuple(events),
+        final_state=result.snapshot.world,
+        events=tuple(result.events),
     )

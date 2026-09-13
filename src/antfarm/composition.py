@@ -10,7 +10,7 @@ from antfarm.application.agent import ModelBackedAgent
 from antfarm.application.engine import SimulationEngine
 from antfarm.application.scheduler import StableScheduler
 from antfarm.config.schema import MockProviderConfig, ScenarioConfig
-from antfarm.domain.models import AgentId, RunId
+from antfarm.domain.models import AgentId, RunId, RunMetadata
 from antfarm.environments import CounterEnvironment
 from antfarm.ports.models import ModelProvider, ModelResponse
 
@@ -60,11 +60,18 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
                 f"provider kind for model {agent_config.model_ref!r} is not implemented"
             )
         agent_id = AgentId(agent_config.id)
-        agents[agent_id] = ModelBackedAgent(id=agent_id, provider=provider)
+        agents[agent_id] = ModelBackedAgent(
+            id=agent_id,
+            model_ref=agent_config.model_ref,
+            provider=provider,
+        )
 
     storage = InMemoryStorage()
     run_id = RunId(config.run.id)
-    storage.create_run(run_id, config.normalized_data())
+    storage.create_run(
+        RunMetadata(run_id=run_id, seed=config.run.seed),
+        config.normalized_data(),
+    )
     event_bus = InMemoryEventBus()
     engine = SimulationEngine(
         run_id=run_id,

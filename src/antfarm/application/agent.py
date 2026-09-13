@@ -9,6 +9,7 @@ from antfarm.ports.models import ModelProvider, ModelRequest
 @dataclass(slots=True)
 class ModelBackedAgent:
     id: AgentId
+    model_ref: str
     provider: ModelProvider
 
     async def decide(self, context: AgentContext) -> ActionProposal | None:

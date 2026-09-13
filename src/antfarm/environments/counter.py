@@ -1,18 +1,18 @@
 """A tiny world used only to prove the engine lifecycle."""
 
 from collections.abc import Iterable
-from random import Random
 
+from antfarm.domain.json_values import JsonObject
 from antfarm.domain.models import (
     ActionProposal,
     ActionResult,
     AgentId,
-    JsonObject,
     Observation,
     Tick,
     ValidatedAction,
     ValidationResult,
 )
+from antfarm.domain.protocols import RandomSource
 
 
 class CounterEnvironment:
@@ -45,7 +45,7 @@ class CounterEnvironment:
             )
         )
 
-    def apply(self, action: ValidatedAction, rng: Random) -> ActionResult:
+    def apply(self, action: ValidatedAction, rng: RandomSource) -> ActionResult:
         del rng  # This world is deterministic but preserves the seeded boundary.
         if action.kind != "increment":
             raise ValueError("environment can only apply increment actions")
@@ -57,3 +57,11 @@ class CounterEnvironment:
 
     def snapshot(self) -> JsonObject:
         return {"value": self._value}
+
+    def restore(self, state: JsonObject) -> None:
+        if set(state) != {"value"}:
+            raise ValueError("counter state must contain only value")
+        value = state["value"]
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError("counter value must be an integer")
+        self._value = value

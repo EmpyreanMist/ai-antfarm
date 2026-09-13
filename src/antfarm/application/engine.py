@@ -5,14 +5,17 @@ from dataclasses import dataclass
 from random import Random
 
 from antfarm.application.scheduler import CognitionScheduler, ScheduleContext
+from antfarm.domain.json_values import JsonObject
 from antfarm.domain.models import (
     AgentContext,
     AgentId,
     Event,
     EventSequence,
-    JsonObject,
     MemoryItem,
+    MemoryQuery,
     RunId,
+    RunLimit,
+    RunResult,
     SimulationSnapshot,
     Tick,
 )
@@ -71,7 +74,7 @@ class SimulationEngine:
             events.append(observation_event)
             context = AgentContext(
                 observation=observation,
-                memories=tuple(self._memory.recall(agent_id, limit=10)),
+                memories=tuple(self._memory.recall(agent_id, MemoryQuery(limit=10))),
             )
             try:
                 proposal = await agent.decide(context)
@@ -146,14 +149,29 @@ class SimulationEngine:
 
         events.append(self._event(tick, "tick.completed"))
         self._tick = tick
-        snapshot = SimulationSnapshot(tick=tick, world=self._environment.snapshot())
+        snapshot = SimulationSnapshot(
+            tick=tick,
+            world=self._environment.snapshot(),
+            memory=self._memory.snapshot(),
+        )
         committed_events = tuple(events)
         self._storage.commit_step(self._run_id, snapshot, committed_events)
         self._event_bus.publish(committed_events)
         return StepResult(snapshot=snapshot, events=committed_events)
 
     def snapshot(self) -> SimulationSnapshot:
-        return SimulationSnapshot(tick=self._tick, world=self._environment.snapshot())
+        return SimulationSnapshot(
+            tick=self._tick,
+            world=self._environment.snapshot(),
+            memory=self._memory.snapshot(),
+        )
+
+    async def run(self, limit: RunLimit) -> RunResult:
+        events: list[Event] = []
+        for _ in range(limit.ticks):
+            result = await self.step()
+            events.extend(result.events)
+        return RunResult(snapshot=self.snapshot(), events=events)
 
     def _event(
         self,
