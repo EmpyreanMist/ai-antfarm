@@ -2,16 +2,17 @@
 
 ## Project Structure & Module Organization
 
-Read this file and every document under `docs/` before making changes. AntFarm AI is currently in its foundation phase. Architecture decisions live in `docs/ARCHITECTURE.md`, milestones in `docs/ROADMAP.md`, and accepted decisions in `docs/adr/`.
+Read this file and every document under `docs/` before making changes. AntFarm AI is currently implementing M0. Architecture decisions live in `docs/ARCHITECTURE.md`, milestone progress lives in `docs/ROADMAP.md`, and accepted decisions live in `docs/adr/`.
 
 M0 will use a `src` layout: domain types in `src/antfarm/domain/`, orchestration in `application/`, stable dependency interfaces in `ports/`, and provider, memory, and persistence implementations in `adapters/`. Put example configurations in `scenarios/examples/` and mirror package areas under `tests/unit/` and `tests/integration/`.
 
 ## Build, Test, and Development Commands
 
-The repository is documentation-only until the bootstrap issue lands. The planned standard commands are:
+The standard development commands are:
 
 - `uv sync --dev` — create the locked development environment.
 - `uv run antfarm validate scenarios/examples/minimal.yaml` — validate a scenario.
+- `uv run antfarm run scenarios/examples/minimal.yaml` — run the offline deterministic example.
 - `uv run pytest` — run all automated tests.
 - `uv run ruff check .` — run lint checks.
 - `uv run mypy src tests` — run strict type checks.
@@ -28,7 +29,7 @@ Use pytest. Name files `test_<subject>.py` and tests `test_<behavior>`. Core tes
 
 ## Commit & Pull Request Guidelines
 
-There is no existing commit history, so adopt Conventional Commits: `feat(engine): add deterministic step ordering`. Keep commits focused. Pull requests must explain scope, link the relevant roadmap issue, list verification commands, and call out architecture or schema changes. Include screenshots only when a future UI change affects rendered behavior.
+Use Conventional Commits, for example `feat(engine): add deterministic step ordering`. Keep commits focused. Pull requests must explain scope, link the relevant roadmap issue, list verification commands, and call out architecture or schema changes. Include screenshots only when a future UI change affects rendered behavior.
 
 ## Architecture & Security
 
