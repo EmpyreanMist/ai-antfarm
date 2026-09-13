@@ -18,6 +18,7 @@ from antfarm.domain import (
     AgentContext,
     AgentId,
     CognitionOutcome,
+    Event,
     Observation,
     RunId,
     RunLimit,
@@ -30,7 +31,13 @@ from antfarm.domain.json_values import JsonObject
 from antfarm.domain.protocols import Agent, RandomSource
 
 
-def _config(*, action_kind: str = "increment", amount: int = 1) -> ScenarioConfig:
+def _config(
+    *,
+    action_kind: str = "increment",
+    amount: int = 1,
+    interval: int | None = 1,
+    event_kinds: tuple[str, ...] = (),
+) -> ScenarioConfig:
     return ScenarioConfig.model_validate(
         {
             "schema_version": 1,
@@ -55,7 +62,11 @@ def _config(*, action_kind: str = "increment", amount: int = 1) -> ScenarioConfi
             "actions": [{"kind": "increment"}],
             "environment": {"kind": "counter", "initial_value": 4},
             "memory": {"kind": "in_memory"},
-            "scheduling": {"kind": "stable"},
+            "scheduling": {
+                "kind": "stable",
+                "interval": interval,
+                "event_kinds": event_kinds,
+            },
             "storage": {"kind": "memory"},
         }
     )
@@ -95,6 +106,20 @@ def test_successful_action_emits_ordered_events() -> None:
     assert simulation.event_bus.published == list(result.events)
 
 
+def test_event_only_scheduler_can_leave_a_tick_without_due_agents() -> None:
+    simulation = compose(
+        _config(interval=None, event_kinds=("external.world_changed",))
+    )
+
+    result = asyncio.run(simulation.engine.step())
+
+    assert dict(result.snapshot.world) == {"value": 4}
+    assert [event.kind for event in result.events] == [
+        "tick.started",
+        "tick.completed",
+    ]
+
+
 def test_repeated_mock_runs_are_identical() -> None:
     first = asyncio.run(compose(_config(amount=2)).engine.run(RunLimit(ticks=2)))
     second = asyncio.run(compose(_config(amount=2)).engine.run(RunLimit(ticks=2)))
@@ -124,6 +149,15 @@ class _RecordingScheduler:
 
     def record(self, outcomes: Sequence[CognitionOutcome]) -> None:
         self.recorded.extend(outcomes)
+
+    def notify(self, events: Sequence[Event]) -> None:
+        del events
+
+    def snapshot(self) -> JsonObject:
+        return {}
+
+    def restore(self, state: JsonObject) -> None:
+        del state
 
 
 class _RandomEnvironment:

@@ -11,6 +11,29 @@ from antfarm.domain import (
 )
 
 
+def test_recall_is_bounded_and_scoped_to_one_agent() -> None:
+    memory = InMemoryMemoryStore()
+    memory.append(
+        AgentId("alice"),
+        (
+            MemoryItem(kind="result", content={"value": 1}),
+            MemoryItem(kind="result", content={"value": 2}),
+            MemoryItem(kind="result", content={"value": 3}),
+        ),
+    )
+    memory.append(
+        AgentId("bob"),
+        (MemoryItem(kind="result", content={"value": 99}),),
+    )
+
+    assert memory.recall(AgentId("alice"), MemoryQuery(limit=2)) == (
+        MemoryItem(kind="result", content={"value": 2}),
+        MemoryItem(kind="result", content={"value": 3}),
+    )
+    assert memory.recall(AgentId("alice"), MemoryQuery(limit=0)) == ()
+    assert memory.recall(AgentId("missing"), MemoryQuery(limit=10)) == ()
+
+
 def test_memory_snapshot_restore_round_trip() -> None:
     original = InMemoryMemoryStore()
     original.append(

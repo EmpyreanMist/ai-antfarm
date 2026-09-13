@@ -200,6 +200,29 @@ def test_normalized_json_is_canonical_and_contains_expanded_agents() -> None:
     ]
 
 
+def test_event_only_scheduling_is_valid() -> None:
+    data = _valid_data()
+    data["scheduling"] = {
+        "kind": "stable",
+        "interval": None,
+        "cooldown": 2,
+        "event_kinds": ["action.applied"],
+    }
+
+    config = ScenarioConfig.model_validate(data)
+
+    assert config.scheduling.interval is None
+    assert config.scheduling.event_kinds == ("action.applied",)
+
+
+def test_scheduling_requires_a_due_strategy() -> None:
+    data = _valid_data()
+    data["scheduling"] = {"kind": "stable", "interval": None}
+
+    with pytest.raises(ValidationError, match="interval or event kind"):
+        ScenarioConfig.model_validate(data)
+
+
 def test_unsupported_component_kinds_are_rejected() -> None:
     data = _valid_data()
     data["storage"] = {"kind": "postgres"}

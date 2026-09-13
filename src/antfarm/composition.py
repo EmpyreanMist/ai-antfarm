@@ -27,8 +27,7 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
 
     if config.storage.kind != "memory":
         raise ValueError("sqlite storage is configured but not implemented yet")
-    if config.scheduling.interval != 1:
-        raise ValueError("scheduler intervals are configured but not implemented yet")
+
     if config.rules:
         raise ValueError("simulation rules are configured but not implemented yet")
     if config.metrics:
@@ -82,8 +81,13 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
             agent_ids=agents,
         ),
         memory=InMemoryMemoryStore(),
-        scheduler=StableScheduler(),
+        scheduler=StableScheduler(
+            interval=config.scheduling.interval,
+            cooldown=config.scheduling.cooldown,
+            event_kinds=config.scheduling.event_kinds,
+        ),
         event_bus=event_bus,
         storage=storage,
+        memory_recall_limit=config.memory.recall_limit,
     )
     return ComposedSimulation(engine=engine, storage=storage, event_bus=event_bus)

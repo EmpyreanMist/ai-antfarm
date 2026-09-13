@@ -46,7 +46,10 @@ class SimulationEngine:
         scheduler: CognitionScheduler,
         event_bus: EventBus,
         storage: Storage,
+        memory_recall_limit: int = 10,
     ) -> None:
+        if memory_recall_limit < 0:
+            raise ValueError("memory recall limit must not be negative")
         self._run_id = run_id
         self._agents = dict(agents)
         self._environment = environment
@@ -54,6 +57,7 @@ class SimulationEngine:
         self._scheduler = scheduler
         self._event_bus = event_bus
         self._storage = storage
+        self._memory_recall_limit = memory_recall_limit
         self._rng = Random(seed)
         self._tick = Tick(0)
         self._sequence = 0
@@ -78,7 +82,12 @@ class SimulationEngine:
             events.append(observation_event)
             context = AgentContext(
                 observation=observation,
-                memories=tuple(self._memory.recall(agent_id, MemoryQuery(limit=10))),
+                memories=tuple(
+                    self._memory.recall(
+                        agent_id,
+                        MemoryQuery(limit=self._memory_recall_limit),
+                    )
+                ),
             )
             try:
                 proposal = await agent.decide(context)
@@ -211,11 +220,13 @@ class SimulationEngine:
 
         self._scheduler.record(tuple(outcomes))
         events.append(self._event(tick, "tick.completed"))
+        self._scheduler.notify(tuple(events))
         self._tick = tick
         snapshot = SimulationSnapshot(
             tick=tick,
             world=self._environment.snapshot(),
             memory=self._memory.snapshot(),
+            scheduler=self._scheduler.snapshot(),
         )
         committed_events = tuple(events)
         self._storage.commit_step(self._run_id, snapshot, committed_events)
@@ -227,6 +238,7 @@ class SimulationEngine:
             tick=self._tick,
             world=self._environment.snapshot(),
             memory=self._memory.snapshot(),
+            scheduler=self._scheduler.snapshot(),
         )
 
     async def run(self, limit: RunLimit) -> RunResult:

@@ -14,12 +14,14 @@ The foundation currently includes:
 - Immutable domain values and provider-independent protocols
 - A deterministic mock model, counter environment, and validated-action engine
 - Ordered failure, timeout, rejection, no-op, and applied-action events
+- Interval, cooldown, and event-triggered scheduling with restorable state
+- Bounded, agent-scoped in-memory recall with snapshot/restore
 - An offline example scenario with unit and end-to-end tests
 
-The repository bootstrap, strict scenario schema, core contracts, and deterministic
-engine lifecycle are complete. SQLite recovery, richer scheduling and memory
-behavior, a real OpenAI-compatible provider, and the complete CLI inspection surface
-remain planned M0 work. See [the roadmap](docs/ROADMAP.md) for current progress.
+The repository bootstrap, strict scenario schema, core contracts, deterministic
+engine lifecycle, and baseline scheduling and memory are complete. SQLite recovery,
+a real OpenAI-compatible provider, and the complete CLI inspection surface remain
+planned M0 work. See [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Quick Start
 

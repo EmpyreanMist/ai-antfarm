@@ -12,9 +12,10 @@ M0 proves a deterministic, local-first vertical slice. Each item below is issue-
 - **M0-04 — Complete:** deterministic ticks, seeded action ordering, validated-only
   mutation, and explicit malformed, timeout, rejected, and no-op outcomes are
   implemented.
-- **M0-05 — Next:** complete scheduler strategies and snapshot-capable baseline
-  memory.
-- **M0-06 through M0-08 — Planned.**
+- **M0-05 — Complete:** interval, cooldown, event-triggered, and idle scheduling,
+  bounded agent-scoped recall, and memory/scheduler snapshot state are implemented.
+- **M0-06 — Next:** add atomic SQLite event batches and checkpoint recovery.
+- **M0-07 through M0-08 — Planned.**
 
 ### M0-01: Repository and Python Bootstrap
 

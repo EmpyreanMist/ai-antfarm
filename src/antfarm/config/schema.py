@@ -7,6 +7,7 @@ from typing import Annotated, Literal, Self, cast
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 Identifier = Annotated[str, Field(min_length=1, pattern=r"^[a-z][a-z0-9_-]*$")]
+EventKind = Annotated[str, Field(min_length=1, pattern=r"^[a-z][a-z0-9_.-]*$")]
 EnvironmentVariable = Annotated[str, Field(min_length=1, pattern=r"^[A-Z_][A-Z0-9_]*$")]
 Scalar = str | int | float | bool | None
 
@@ -99,7 +100,17 @@ class MemoryConfig(StrictModel):
 
 class SchedulingConfig(StrictModel):
     kind: Literal["stable"]
-    interval: PositiveInt = 1
+    interval: PositiveInt | None = 1
+    cooldown: Annotated[int, Field(ge=0)] = 0
+    event_kinds: tuple[EventKind, ...] = ()
+
+    @model_validator(mode="after")
+    def has_a_due_strategy(self) -> Self:
+        if self.interval is None and not self.event_kinds:
+            raise ValueError("scheduling requires an interval or event kind")
+        if len(set(self.event_kinds)) != len(self.event_kinds):
+            raise ValueError("duplicate scheduling event kinds")
+        return self
 
 
 class ActionAllowlistRuleConfig(StrictModel):
