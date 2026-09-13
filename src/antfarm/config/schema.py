@@ -103,8 +103,15 @@ class ContributeActionConfig(StrictModel):
     kind: Literal["contribute"]
 
 
+class SayActionConfig(StrictModel):
+    kind: Literal["say"]
+
+
 ActionConfig = Annotated[
-    IncrementActionConfig | HarvestActionConfig | ContributeActionConfig,
+    IncrementActionConfig
+    | HarvestActionConfig
+    | ContributeActionConfig
+    | SayActionConfig,
     Field(discriminator="kind"),
 ]
 
@@ -114,10 +121,17 @@ class CounterEnvironmentConfig(StrictModel):
     initial_value: int = 0
 
 
+class CommonsSocialConfig(StrictModel):
+    message_max_length: PositiveInt = 500
+    history_limit: PositiveInt = 20
+    roster_limit: PositiveInt = 100
+
+
 class CommonsEnvironmentConfig(StrictModel):
     kind: Literal["commons"]
     initial_resource: NonNegativeInt
     initial_endowment: NonNegativeInt = 0
+    social: CommonsSocialConfig | None = None
 
 
 EnvironmentConfig = Annotated[
@@ -129,6 +143,7 @@ EnvironmentConfig = Annotated[
 class MemoryConfig(StrictModel):
     kind: Literal["in_memory"]
     recall_limit: Annotated[int, Field(ge=0)] = 10
+    retention_limit: PositiveInt = 100
 
 
 class SchedulingConfig(StrictModel):
@@ -153,7 +168,9 @@ class ActionAllowlistRuleConfig(StrictModel):
 
 
 RuleConfig = ActionAllowlistRuleConfig
-MetricIdentifier = Literal["action_count", "rejection_count"]
+MetricIdentifier = Literal[
+    "action_count", "rejection_count", "failure_count", "agent_outcomes"
+]
 
 
 class InMemoryStorageConfig(StrictModel):
@@ -233,10 +250,11 @@ class ScenarioConfig(StrictModel):
             raise ValueError("at least one action is required")
         self._require_unique("action kinds", action_kinds)
         action_kind_set = set(action_kinds)
-        supported_actions = {
-            "counter": {"increment"},
-            "commons": {"harvest", "contribute"},
-        }[self.environment.kind]
+        supported_actions = {"increment"}
+        if isinstance(self.environment, CommonsEnvironmentConfig):
+            supported_actions = {"harvest", "contribute"}
+            if self.environment.social is not None:
+                supported_actions.add("say")
         incompatible_actions = action_kind_set.difference(supported_actions)
         if incompatible_actions:
             names = ", ".join(sorted(incompatible_actions))

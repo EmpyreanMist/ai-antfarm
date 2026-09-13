@@ -6,7 +6,13 @@ from types import MappingProxyType
 from typing import Protocol
 
 from antfarm.domain.json_values import JsonObject, freeze_object
-from antfarm.domain.models import AgentId, MemoryItem, Observation
+from antfarm.domain.models import (
+    AgentId,
+    AgentIdentity,
+    AgentPersonality,
+    MemoryItem,
+    Observation,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,7 +23,8 @@ class ProviderCapabilities:
 
 @dataclass(frozen=True, slots=True)
 class ModelRequest:
-    actor_id: AgentId
+    identity: AgentIdentity
+    personality: AgentPersonality | None
     observation: Observation
     memories: Sequence[MemoryItem]
     available_actions: Sequence[JsonObject] = ()
@@ -29,6 +36,12 @@ class ModelRequest:
             "available_actions",
             tuple(freeze_object(action) for action in self.available_actions),
         )
+
+    @property
+    def actor_id(self) -> AgentId:
+        """Compatibility accessor for providers that route by agent ID."""
+
+        return self.identity.id
 
 
 @dataclass(frozen=True, slots=True)

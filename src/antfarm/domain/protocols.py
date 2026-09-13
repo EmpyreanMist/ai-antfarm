@@ -1,5 +1,6 @@
 """Domain contracts implemented by inward-facing application code."""
 
+from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from antfarm.domain.json_values import JsonObject
@@ -8,6 +9,7 @@ from antfarm.domain.models import (
     ActionResult,
     AgentContext,
     AgentId,
+    MemoryItem,
     Observation,
     Tick,
     ValidatedAction,
@@ -33,7 +35,13 @@ class Environment(Protocol):
 
     def validate(self, proposal: ActionProposal) -> ValidationResult: ...
 
-    def apply(self, action: ValidatedAction, rng: RandomSource) -> ActionResult: ...
+    def apply(
+        self, action: ValidatedAction, rng: RandomSource, tick: Tick
+    ) -> ActionResult: ...
+
+    def memory_deliveries(
+        self, action: ValidatedAction, result: ActionResult
+    ) -> Mapping[AgentId, Sequence[MemoryItem]]: ...
 
     def snapshot(self) -> JsonObject: ...
 

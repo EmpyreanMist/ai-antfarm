@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Read this file and every document under `docs/` before making changes. AntFarm AI is currently implementing M0. Architecture decisions live in `docs/ARCHITECTURE.md`, milestone progress lives in `docs/ROADMAP.md`, and accepted decisions live in `docs/adr/`.
+Read this file and every document under `docs/` before making changes. AntFarm AI is currently implementing M2. Architecture decisions live in `docs/ARCHITECTURE.md`, milestone progress lives in `docs/ROADMAP.md`, and accepted decisions live in `docs/adr/`.
 
 M0 will use a `src` layout: domain types in `src/antfarm/domain/`, orchestration in `application/`, stable dependency interfaces in `ports/`, and provider, memory, and persistence implementations in `adapters/`. Put example configurations in `scenarios/examples/` and mirror package areas under `tests/unit/` and `tests/integration/`.
 

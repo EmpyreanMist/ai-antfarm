@@ -100,6 +100,7 @@ def snapshot_to_data(value: SimulationSnapshot) -> dict[str, object]:
         "world": thaw_json(value.world),
         "memory": thaw_json(value.memory),
         "scheduler": thaw_json(value.scheduler),
+        "metrics": thaw_json(value.metrics),
         "engine": thaw_json(value.engine),
     }
 
@@ -110,6 +111,7 @@ def snapshot_from_data(data: Mapping[str, object]) -> SimulationSnapshot:
         world=_object(data, "world"),
         memory=_object(data, "memory"),
         scheduler=_object(data, "scheduler"),
+        metrics=_optional_object(data, "metrics"),
         engine=_object(data, "engine"),
     )
 
@@ -130,6 +132,13 @@ def _integer(data: Mapping[str, object], key: str) -> int:
 
 def _object(data: Mapping[str, object], key: str) -> JsonObject:
     value = data.get(key)
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{key} must be an object")
+    return freeze_object(cast(Mapping[str, object], value))
+
+
+def _optional_object(data: Mapping[str, object], key: str) -> JsonObject:
+    value = data.get(key, {})
     if not isinstance(value, Mapping):
         raise TypeError(f"{key} must be an object")
     return freeze_object(cast(Mapping[str, object], value))

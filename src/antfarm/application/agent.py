@@ -3,7 +3,13 @@
 from dataclasses import dataclass
 
 from antfarm.domain.json_values import JsonObject
-from antfarm.domain.models import ActionProposal, AgentContext, AgentId
+from antfarm.domain.models import (
+    ActionProposal,
+    AgentContext,
+    AgentId,
+    AgentIdentity,
+    AgentPersonality,
+)
 from antfarm.ports.models import (
     MalformedModelResponseError,
     ModelProvider,
@@ -20,13 +26,15 @@ class ModelBackedAgent:
     id: AgentId
     model_ref: str
     provider: ModelProvider
+    personality: AgentPersonality | None = None
     available_actions: tuple[JsonObject, ...] = ()
 
     async def decide(self, context: AgentContext) -> ActionProposal | None:
         try:
             response = await self.provider.generate(
                 ModelRequest(
-                    actor_id=self.id,
+                    identity=AgentIdentity(id=self.id),
+                    personality=self.personality,
                     observation=context.observation,
                     memories=context.memories,
                     available_actions=self.available_actions,

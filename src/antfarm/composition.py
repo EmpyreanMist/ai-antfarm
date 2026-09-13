@@ -12,6 +12,7 @@ from antfarm.adapters.models import (
 from antfarm.adapters.storage import InMemoryStorage, SQLiteStorage
 from antfarm.application.agent import ModelBackedAgent
 from antfarm.application.engine import SimulationEngine
+from antfarm.application.metrics import BuiltInMetricCollector
 from antfarm.application.scheduler import StableScheduler
 from antfarm.config.schema import (
     CommonsEnvironmentConfig,
@@ -21,7 +22,7 @@ from antfarm.config.schema import (
     SqliteStorageConfig,
 )
 from antfarm.domain.json_values import JsonObject
-from antfarm.domain.models import AgentId, RunId, RunMetadata
+from antfarm.domain.models import AgentId, AgentPersonality, RunId, RunMetadata
 from antfarm.domain.protocols import Environment
 from antfarm.environments import CommonsEnvironment, CounterEnvironment
 from antfarm.ports.models import ModelProvider, ModelResponse
@@ -33,6 +34,7 @@ class ComposedSimulation:
     engine: SimulationEngine
     storage: Storage
     event_bus: InMemoryEventBus
+    metrics: BuiltInMetricCollector
 
 
 def compose(config: ScenarioConfig) -> ComposedSimulation:
@@ -40,9 +42,6 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
 
     if config.rules:
         raise ValueError("simulation rules are configured but not implemented yet")
-    if config.metrics:
-        raise ValueError("metric collectors are configured but not implemented yet")
-
     providers: dict[str, ModelProvider] = {}
     for provider_id, provider_config in config.providers.items():
         if not isinstance(provider_config, MockProviderConfig):
@@ -77,6 +76,11 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
             "parameters": {
                 "amount": "A positive integer no greater than own_holding."
             },
+        },
+        "say": {
+            "kind": "say",
+            "description": "Publish one message to the shared public room.",
+            "parameters": {"text": "Bounded, non-empty message text."},
         },
     }
     available_actions = tuple(action_catalog[action.kind] for action in config.actions)
@@ -113,10 +117,18 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
                 f"provider kind for model {agent_config.model_ref!r} is not implemented"
             )
         agent_id = AgentId(agent_config.id)
+        personality = None
+        if agent_config.personality_ref is not None:
+            personality_config = config.personalities[agent_config.personality_ref]
+            personality = AgentPersonality(
+                description=personality_config.description,
+                traits=personality_config.traits,
+            )
         agents[agent_id] = ModelBackedAgent(
             id=agent_id,
             model_ref=agent_config.model_ref,
             provider=provider,
+            personality=personality,
             available_actions=available_actions,
         )
 
@@ -137,6 +149,22 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
             initial_resource=config.environment.initial_resource,
             initial_endowment=config.environment.initial_endowment,
             agent_ids=agents,
+            social=config.environment.social is not None,
+            message_max_length=(
+                config.environment.social.message_max_length
+                if config.environment.social is not None
+                else 500
+            ),
+            history_limit=(
+                config.environment.social.history_limit
+                if config.environment.social is not None
+                else 20
+            ),
+            roster_limit=(
+                config.environment.social.roster_limit
+                if config.environment.social is not None
+                else 100
+            ),
         )
     else:
         environment = CounterEnvironment(
@@ -148,7 +176,9 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
         seed=config.run.seed,
         agents=agents,
         environment=environment,
-        memory=InMemoryMemoryStore(),
+        memory=InMemoryMemoryStore(
+            max_items_per_agent=config.memory.retention_limit
+        ),
         scheduler=StableScheduler(
             interval=config.scheduling.interval,
             cooldown=config.scheduling.cooldown,
@@ -156,6 +186,16 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
         ),
         event_bus=event_bus,
         storage=storage,
+        metrics=BuiltInMetricCollector(
+            config.metrics,
+            action_kinds=tuple(action.kind for action in config.actions),
+            agent_ids=tuple(str(agent_id) for agent_id in agents),
+        ),
         memory_recall_limit=config.memory.recall_limit,
     )
-    return ComposedSimulation(engine=engine, storage=storage, event_bus=event_bus)
+    return ComposedSimulation(
+        engine=engine,
+        storage=storage,
+        event_bus=event_bus,
+        metrics=engine.metrics,
+    )

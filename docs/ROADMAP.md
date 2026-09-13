@@ -119,11 +119,11 @@ deterministic engine and provider-independent core.
 - **M1-01 — Complete:** the finite shared-resource commons environment,
   harvest/contribute action family, compatibility validation, snapshot recovery,
   and deterministic end-to-end example are implemented.
-- **M1-02 — Next:** add richer built-in event-derived metrics and persist their
-  summaries without allowing collectors to mutate simulation state.
-- **M1-03 — Planned:** compare completed runs using normalized scenario metadata,
+- **M1-02 — Complete:** deterministic built-in action, rejection, failure, and
+  per-agent outcome metrics consume committed events and persist in checkpoints.
+- **M1-03 — Deferred until after the interactive target:** compare completed runs using normalized scenario metadata,
   final state, event outcomes, and metric summaries.
-- **M1-04 — Planned:** replay recorded accepted actions and outcomes without
+- **M1-04 — Deferred until after the interactive target:** replay recorded accepted actions and outcomes without
   invoking model providers.
 
 ### M1-01: Multiple Built-in Environments and Actions
@@ -173,10 +173,318 @@ or changing the engine-owned mutation lifecycle.
 **Non-goals:** branching histories, editing event logs, or reproducing provider
 text generation.
 
-## Later Milestone Themes
+## Current-State Review and Planning Boundary
 
-- **M2 — Observation:** REST control/query API and, only when demanded by a live client, WebSocket event streaming.
-- **M3 — Integrations:** concrete provider adapters and an evidence-led OASIS/CAMEL compatibility spike.
-- **M4 — Scale:** profiling-led parallel cognition, Postgres, workers, retention policies, and larger simulations.
+This plan reflects the repository through M2-02, including accepted ADRs 0010 and
+0011. Completed milestone text above is retained. AGENTS.md's introductory
+reference to implementing M0 is historical; the implementation and progress
+entries establish the current baseline.
 
-Dates and detailed scope are intentionally unset until M0 establishes measured constraints.
+The provider adapter already supports configurable OpenAI-compatible endpoints,
+structured decisions, and timeouts. `scenarios/examples/ollama.yaml` and README.md
+already describe a single-agent local-model smoke test. M2-01 now resolves public
+identity and private personality into provider-neutral requests. Composition
+creates one provider instance per used model reference and shares it among assigned
+agents; tests verify that private recall remains isolated.
+
+M2-02 adds opt-in public speech to the commons environment. Accepted messages are
+authenticated, identified, checkpointed, delivered to bounded per-agent memory
+after the originating tick's cognition, and exposed through bounded public
+history starting on the next tick. SQLite tests prove that older messages remain
+in the durable event log after falling out of live context.
+
+The remaining gaps are concrete:
+- Scheduling supports intervals, cooldowns, and actor-based event triggers, but
+  lacks staggered per-agent cadence, a fair invocation budget, and recipient wakeups.
+- The runner is finite and returns an accumulated event list. The CLI prints only
+  after completion; the event bus also retains every published event.
+- Durable steps are atomic, but the engine changes live world, memory, scheduler,
+  and sequence state before commit. Failed commits and cancellation need explicit
+  recovery semantics before continuous operation. Observer exceptions propagate.
+- The HTTP adapter uses a worker thread; cancelling its await does not by itself
+  terminate the underlying request. Real-time shutdown must account for this.
+
+M1-03 comparison and M1-04 replay move later, retaining their identifiers and scope
+above. Neither is needed to generate, validate, deliver, or display speech.
+Checkpoint recovery is required; rebuilding a run from recorded actions is not.
+Their implementation is outside this plan's endpoint.
+
+## Milestone M2: Interactive Local-AI Simulation in the Terminal
+
+This replaces the former unimplemented M2 observation/API theme. No accepted ADR
+requires a network API for terminal observation. ADRs 0001–0010 remain in force;
+new contracts should be documented when implemented, without reopening completed
+milestones. Complete and verify each sub-milestone before starting its successor.
+
+## M2 Progress
+
+- **M2-01 — Complete:** immutable public identity and private personality values
+  reach provider-neutral requests; bounded recall stays agent-scoped; three-agent
+  mock and Ollama examples share one configured model; offline tests cover shared
+  provider composition and safe backend failure.
+- **M2-02 — Complete:** validated public speech, shared bounded social observations,
+  next-tick recipient delivery, retention limits, and durable audit coverage are
+  implemented without exposing private context.
+- **M2-03 — Next:** add paced continuous execution, fair bounded cognition,
+  recovery on failed commits, and safe stopping.
+- **M2-04 — Planned:** stream committed society events in the terminal and verify
+  the complete local-AI experience.
+
+### M2-01: Distinct Agents Using Shared Local Model Backends — Complete
+
+**Purpose:** make the existing local-provider path represent distinct agents with
+their own context, and establish a reliable finite local-model experiment.
+
+**Dependencies:** the current M0/M1-01 baseline and verification of the existing
+M1-02 working-tree changes before proceeding.
+
+**Acceptance criteria**
+
+- Resolve identity, personality description, and traits into immutable,
+  provider-neutral request context. Distinguish public identity from private
+  personality/memory. Mutable holdings remain environment-owned state.
+- Preserve agent-scoped recall and supply it with the agent's identity and current
+  observation on each request. Sharing a backend must not share private histories.
+- Provide finite mock and Ollama examples with at least three distinct agents
+  sharing one model reference; document assigning a second named model to a subset.
+  No runtime or loaded model per agent is created. Ollama owns loading and memory
+  residency; multiple configured models need not remain resident simultaneously.
+- Use the existing generic provider boundary and OpenAI-compatible endpoint.
+  Document starting Ollama, pulling the configured model, matching YAML model names,
+  and adjusting timeouts for cold starts. Do not add a native Ollama SDK unless a
+  demonstrated endpoint incompatibility requires a thin adapter change.
+- Missing models, connection failures, malformed responses, and timeouts produce
+  bounded, useful errors without exposing credentials, raw responses, or changing
+  world state for the failed decision. Validation/inspection remain offline.
+- Mock/captured-request tests prove identity and memory isolation, shared provider
+  composition, configuration rejection, and safe unavailable-model behavior.
+  Real speech style or exact model wording is not an automated assertion.
+
+**Non-goals:** model installation by AntFarm, runtime management, conversational
+speech, new environments, continuous execution, automatic backend discovery.
+
+**Manual test after this step:** run the existing single-agent Ollama example,
+then the new finite three-agent example. Inspect resolved identities/model
+references, observe validated world changes, and try a nonexistent model name or
+stopped backend. Reassign one agent to a second locally available model. Automated
+tests must still pass with Ollama stopped.
+
+### M2-02: Validated Speech and Shared Social Observations — Complete
+
+**Purpose:** let agents freely choose what to say and respond to one another
+through the same controlled lifecycle as physical world actions.
+
+**Dependencies:** M2-01.
+
+**Acceptance criteria**
+
+- Extend the built-in commons environment with an explicit opt-in social mode and
+  a `say` action alongside harvest/contribute. Keep existing counter and commons
+  defaults compatible. The closed schema rejects incompatible action selections.
+- Speech is an ActionProposal with bounded non-empty text. The authenticated actor
+  comes from the engine, not model-supplied sender metadata. Environment validation
+  precedes application; accepted messages receive stable IDs, sender IDs, and ticks
+  and appear in ordered committed action outcomes. Rejections create no message.
+- Use one public room: every agent can hear every accepted message, including its
+  own. Free communication means model-generated text, not a fixed script, with
+  configurable length/history limits. Each cognition chooses one world action,
+  speech action, or no-op; simultaneous action bundles are unnecessary.
+- Other agents see a bounded public roster, shared resources, their own holdings,
+  and recent public messages. Public identity is visible; private personality and
+  private recall are not copied into other agents' observations.
+- Define delivery at tick boundaries: speech accepted in tick T becomes observable
+  in T+1, after T commits, for all agents regardless of their position in action
+  order. Existing sequential physical-action visibility remains unchanged. A
+  staged message must not reach another model before its step commits.
+- The engine prepares bounded recipient memory entries and delivery cursors as
+  part of the next checkpoint transaction, using environment-defined recipients.
+  Observation/history and recent recall can overlap, but stable message IDs prevent
+  duplicate memory insertion. Restore does not redeliver already recorded messages.
+- Retain only configurable recent message and per-agent memory windows in live
+  state; disclose that older conversation falls out of context. The durable event
+  log retains accepted speech. Agents that have not thought recently receive a
+  bounded recent window, not an unlimited inbox.
+- Message text remains simulation data in prompts. It cannot invoke tools or
+  bypass action validation. Validated speech is intentionally persisted as world
+  content; this does not enable raw model prompt/response logging.
+- Offline tests prove next-tick delivery, sender authenticity, rejection, bounded
+  retention, no private-memory leakage, and deterministic snapshot continuation.
+
+**Non-goals:** private messages, multiple channels, human chat input, voice/audio,
+  semantic memory, OASIS/CAMEL, a general messaging service.
+
+**Manual test after this step:** run finite mock and local-model social scenarios;
+inspect their persisted speech/action events using a documented library snippet.
+Verify that later decisions receive earlier messages, and that harvest/contribute
+still work. Live terminal rendering arrives in M2-04.
+
+### M2-03: Paced Autonomous Execution and Safe Stop — Next
+
+**Purpose:** run a shared backend indefinitely at a sensible cadence while
+preserving deterministic tick ordering and consistent committed state.
+
+**Dependencies:** M2-02.
+
+**Acceptance criteria**
+
+- Add an application-level continuous runner around `engine.step()`. Keep the
+  finite, unpaced runner for tests and existing examples. An explicit continuous
+  option runs until Ctrl+C; merely loading an old scenario stays finite.
+- Use a monotonic clock for a configurable minimum interval between tick starts.
+  If a step exceeds that interval, advance once when ready; never overlap steps,
+  skip logical ticks, or launch catch-up bursts. Wall time changes pacing only,
+  not action order or RNG state. Real model generation remains nondeterministic.
+- Extend the existing scheduler with per-agent/per-pool cadence overrides,
+  deterministic staggered starting offsets, cooldowns, and a maximum number of
+  cognitions per tick. Default the interactive example to one invocation per tick.
+  Keep sequential cognition and application, limiting backend load without workers.
+- Retain due agents in a bounded set and rotate fairly through stable agent IDs;
+  no starvation under sustained load. Checkpoint the fairness cursor, due state,
+  offsets, and cooldowns. Idle ticks do not call providers.
+- Accepted public speech wakes its recipients, excluding the speaker, for a future
+  tick. Preserve existing actor-trigger semantics for other events. Recipient
+  wakeups coalesce and obey cadence cooldowns and the invocation budget; they never
+  force every listener to invoke a model immediately. Periodic cognition provides
+  an autonomous starting point when no messages exist.
+- Apply capped deterministic retry cooldowns after provider failures. Avoid tight
+  retry loops when Ollama is down; healthy agents can continue. A failed decision
+  has no action effect, though its failure event and scheduling outcome commit.
+- On failure before commit, restore world, memory, scheduler, metrics, tick, and
+  RNG/sequence to the preceding complete checkpoint. A storage failure stops the
+  runner clearly rather than continuing with divergent state. Post-commit observer
+  failure must never retry an already committed action or roll it back.
+- Ctrl+C stops scheduling new cognition, cancels or bounds the outstanding request,
+  and either completes an atomic step or discards its uncommitted changes. Close
+  storage and provider resources and report the last committed tick. Late worker
+  responses cannot apply actions. Test the actual transport shutdown behavior;
+  replace the thread-based transport only if needed to meet a documented bounded
+  stop time. Do not accumulate orphan requests across timeouts.
+- Continuous execution streams batches without retaining all events in RunResult
+  or the event bus. Bound live buffers; keep SQLite's append-only audit on disk.
+  No disk retention service is required; full-disk errors stop safely.
+- Tests use fake clocks, deterministic providers, failure injection, and temporary
+  SQLite databases to prove fairness, cadence, cancellation, commit recovery, and
+  bounded in-memory retention. No real sleeps or Ollama dependency are required.
+
+**Non-goals:** hard real-time guarantees, parallel cognition, performance targets
+  for large populations, hot configuration reload, replay or comparison tooling.
+
+**Manual test after this step:** start continuous mock and Ollama scenarios from
+the terminal, let several agents share a backend, stop during a slow request with
+Ctrl+C, and inspect the final checkpoint via a documented library snippet. Stop
+Ollama during a run and confirm bounded retries and safe termination. This step
+provides lifecycle/status output; full dialogue display follows in M2-04.
+
+### M2-04: Live Terminal Society and Local-AI Acceptance — Planned
+
+**Purpose:** complete the first interactive experience: watch several local agents
+autonomously act and converse in a shared world until stopped.
+
+**Dependencies:** M2-03.
+
+**Acceptance criteria**
+
+- Add a thin terminal observer subscribed to committed events. Flush readable
+  speech, world-action results, rejection/failure notices, tick and actor identity
+  while running. Do not wait for the final summary or display an unvalidated
+  proposal as accepted speech. Live means after each completed atomic tick; the
+  one-cognition-per-tick default prevents long multi-agent display batches.
+- Distinguish waiting/model-busy lifecycle status from committed simulation events.
+  No token streaming is needed. Escape terminal control sequences in model text
+  and support plain redirected output. A broken output stream stops cleanly without
+  duplicating committed actions.
+- Expose documented live and continuous CLI options with pacing configuration;
+  preserve existing finite CLI behavior. At startup print run identity, backend
+  assignments, cadence, and stop instructions. At stop print last committed tick,
+  final world/metric summary, and checkpoint location. Avoid overwriting existing
+  durable runs: assign a fresh run ID or reject an explicit duplicate clearly.
+- Supply matching offline mock and Ollama social examples with at least three
+  identities, contrasting personalities, initial holdings, recent memory, speech,
+  and physical actions. One named local model is the default for all three; a
+  documented edit routes selected agents to an optional second model/backend.
+- Provide exact Windows/VS Code terminal instructions and manual smoke checks for
+  backend startup, model download, scenario validation, live execution, Ctrl+C,
+  and unavailable model/runtime handling. Record tested model/runtime versions
+  during implementation rather than assuming a model tag guarantees compatibility.
+- An offline end-to-end test proves dialogue is emitted before run completion,
+  messages influence later observations, actions remain validated, and stopping
+  leaves a consistent SQLite checkpoint. Real Ollama smoke tests verify coherent
+  responses to prior speech and distinct context, without expecting exact wording.
+- Run pytest, Ruff, and strict mypy before declaring the target reached. Document
+  measured stop behavior and model latency; do not claim hard real-time timing.
+
+**Non-goals:** human participation in the conversation, web UI, REST, WebSockets,
+  React, Postgres, distributed workers, automatic model tuning, or new frameworks.
+
+**Manual test after this step:** watch three agents sharing one local model talk,
+respond to one another, harvest, and contribute live. Let the simulation continue
+without prompts from the user, then press Ctrl+C and verify its saved checkpoint.
+Repeat with another model assignment and with Ollama unavailable.
+
+## Recommended Sequence and Exact Terminal Target
+
+1. Verify the current M2-02 baseline; keep completed milestones intact.
+2. M2-01 connects distinct agent context to the already working shared provider.
+3. M2-02 makes speech a validated part of the world with explicit delivery rules.
+4. M2-03 adds bounded cognition cadence, wall-clock pacing, and safe stopping.
+5. M2-04 displays committed dialogue/actions live and verifies the full local path.
+
+This is the shortest safe path because it reuses the existing provider, commons
+world, scheduler, event bus, and SQLite checkpoint boundary. Comparison and replay
+provide later analysis, not a prerequisite for talking agents. Safety and bounded
+state precede an indefinite run; a terminal observer requires no server or UI stack.
+
+**First real Ollama test:** available now through M0-07/M0-08 and the existing
+`scenarios/examples/ollama.yaml`; M2-01 extends that to distinct shared-backend
+agents. **First finite multi-agent conversation:** M2-02 through the social mock
+and Ollama scenarios. **First live multi-agent conversation:** M2-04. No
+additional infrastructure is scheduled beyond this target.
+
+The following is the **proposed final interface**, not a claim that the new file
+or CLI options already exist. During implementation, verify the model against the
+installed Ollama release; the tag below matches the existing repository example.
+
+In a VS Code PowerShell terminal, start Ollama if its app/service is not already
+serving; leave this terminal open:
+
+```powershell
+ollama serve
+```
+
+In a second PowerShell terminal:
+
+```powershell
+Set-Location C:\Programmering\ai-antfarm
+uv sync --dev
+ollama pull qwen3.5:0.8b
+uv run antfarm validate scenarios/examples/social-ollama.yaml
+uv run antfarm inspect scenarios/examples/social-ollama.yaml
+uv run antfarm run scenarios/examples/social-ollama.yaml --live --continuous --tick-seconds 1
+```
+
+The proposed scenario assigns Alice, Bob, and Charlie different personalities but
+the same model reference and `http://localhost:11434/v1` provider. It selects the
+social commons mode, SQLite storage, bounded conversation/memory, staggered cadence,
+and one cognition per tick. A second local model is an optional YAML assignment,
+not a second agent process. Requests cause the backend to load the chosen models.
+
+Illustrative output (wording, decisions, and timing vary with the model):
+
+```text
+run=social-<unique-id> agents=3 backend=local-ollama model=qwen3.5:0.8b
+continuous; tick interval >= 1s; cognition budget=1; Ctrl+C to stop
+[tick 1] Alice says: "Let's leave some resources for everyone."
+[tick 2] Bob says: "Agreed. I'll take one and contribute later."
+[tick 3] Charlie harvests 1; resource=4
+...
+Stopping... last committed tick=27 checkpoint=<local database path>
+```
+
+The simulation runs autonomously without entering text. A tick can take longer
+than one second while a model responds. Speech is displayed only after validation
+and commit, reaches other agents on subsequent ticks, and can influence their next
+scheduled decisions. Ctrl+C ends the run with a consistent checkpoint.
+
+**Roadmap endpoint:** I can run AntFarm from a terminal with several Ollama-backed
+local AI agents that autonomously act and talk to each other live in a shared
+simulation.

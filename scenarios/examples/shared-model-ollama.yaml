@@ -1,0 +1,61 @@
+schema_version: 1
+run:
+  id: shared-model-ollama
+  seed: 53
+  ticks: 1
+providers:
+  local-ollama:
+    kind: openai_compatible
+    base_url: http://localhost:11434/v1
+models:
+  qwen-local:
+    provider_ref: local-ollama
+    model: qwen3.5:0.8b
+    timeout_seconds: 180
+    parameters:
+      temperature: 0
+      seed: 53
+      reasoning_effort: none
+      max_tokens: 128
+personalities:
+  cautious:
+    description: Preserve the shared resource and avoid unnecessary risk.
+    traits:
+      risk_tolerance: low
+  pragmatic:
+    description: Balance personal holdings with the common good.
+    traits:
+      cooperation: medium
+  generous:
+    description: Prefer helping the commons when your own holding permits it.
+    traits:
+      cooperation: high
+agents:
+  - id: alice
+    model_ref: qwen-local
+    personality_ref: cautious
+  - id: bob
+    model_ref: qwen-local
+    personality_ref: pragmatic
+  - id: charlie
+    model_ref: qwen-local
+    personality_ref: generous
+actions:
+  - kind: harvest
+  - kind: contribute
+environment:
+  kind: commons
+  initial_resource: 6
+  initial_endowment: 1
+memory:
+  kind: in_memory
+  recall_limit: 4
+scheduling:
+  kind: stable
+metrics:
+  - action_count
+  - rejection_count
+  - failure_count
+  - agent_outcomes
+storage:
+  kind: memory

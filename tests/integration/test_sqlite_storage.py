@@ -36,6 +36,7 @@ def _snapshot(sequence: int) -> SimulationSnapshot:
         world={"value": sequence},
         memory={"alice": ({"kind": "result", "content": {"value": sequence}},)},
         scheduler={"last_tick": sequence},
+        metrics={"action_count": {"total": sequence}},
         engine={"event_sequence": sequence, "random_state": random_state},
     )
 

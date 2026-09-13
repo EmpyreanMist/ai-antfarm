@@ -41,5 +41,10 @@ memory:
   kind: in_memory
 scheduling:
   kind: stable
+metrics:
+  - action_count
+  - rejection_count
+  - failure_count
+  - agent_outcomes
 storage:
   kind: memory

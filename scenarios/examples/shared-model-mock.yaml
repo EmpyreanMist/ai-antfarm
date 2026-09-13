@@ -1,0 +1,76 @@
+schema_version: 1
+run:
+  id: shared-model-mock
+  seed: 53
+  ticks: 2
+providers:
+  scripted:
+    kind: mock
+    decisions:
+      alice:
+        - kind: harvest
+          parameters:
+            amount: 2
+        - kind: contribute
+          parameters:
+            amount: 1
+      bob:
+        - kind: harvest
+          parameters:
+            amount: 1
+        - kind: contribute
+          parameters:
+            amount: 1
+      charlie:
+        - kind: harvest
+          parameters:
+            amount: 2
+        - kind: contribute
+          parameters:
+            amount: 1
+models:
+  shared-model:
+    provider_ref: scripted
+    model: fixed-decisions
+personalities:
+  cautious:
+    description: Preserve the shared resource when possible.
+    traits:
+      risk_tolerance: low
+  pragmatic:
+    description: Balance personal holdings with the common good.
+    traits:
+      cooperation: medium
+  generous:
+    description: Prefer contributing resources back to the commons.
+    traits:
+      cooperation: high
+agents:
+  - id: alice
+    model_ref: shared-model
+    personality_ref: cautious
+  - id: bob
+    model_ref: shared-model
+    personality_ref: pragmatic
+  - id: charlie
+    model_ref: shared-model
+    personality_ref: generous
+actions:
+  - kind: harvest
+  - kind: contribute
+environment:
+  kind: commons
+  initial_resource: 6
+  initial_endowment: 0
+memory:
+  kind: in_memory
+  recall_limit: 4
+scheduling:
+  kind: stable
+metrics:
+  - action_count
+  - rejection_count
+  - failure_count
+  - agent_outcomes
+storage:
+  kind: memory

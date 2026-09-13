@@ -1,12 +1,13 @@
 """A tiny world used only to prove the engine lifecycle."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from antfarm.domain.json_values import JsonObject
 from antfarm.domain.models import (
     ActionProposal,
     ActionResult,
     AgentId,
+    MemoryItem,
     Observation,
     Tick,
     ValidatedAction,
@@ -45,8 +46,10 @@ class CounterEnvironment:
             )
         )
 
-    def apply(self, action: ValidatedAction, rng: RandomSource) -> ActionResult:
-        del rng  # This world is deterministic but preserves the seeded boundary.
+    def apply(
+        self, action: ValidatedAction, rng: RandomSource, tick: Tick
+    ) -> ActionResult:
+        del rng, tick  # This world preserves the seeded and tick boundaries.
         if action.kind != "increment":
             raise ValueError("environment can only apply increment actions")
         amount = action.parameters["amount"]
@@ -54,6 +57,12 @@ class CounterEnvironment:
             raise ValueError("validated increment amount must be an integer")
         self._value += amount
         return ActionResult(success=True, payload={"value": self._value})
+
+    def memory_deliveries(
+        self, action: ValidatedAction, result: ActionResult
+    ) -> Mapping[AgentId, tuple[MemoryItem, ...]]:
+        del action, result
+        return {}
 
     def snapshot(self) -> JsonObject:
         return {"value": self._value}

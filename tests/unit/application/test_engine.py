@@ -21,6 +21,7 @@ from antfarm.domain import (
     AgentId,
     CognitionOutcome,
     Event,
+    MemoryItem,
     Observation,
     RunId,
     RunLimit,
@@ -233,11 +234,20 @@ class _RandomEnvironment:
             )
         )
 
-    def apply(self, action: ValidatedAction, rng: RandomSource) -> ActionResult:
+    def apply(
+        self, action: ValidatedAction, rng: RandomSource, tick: Tick
+    ) -> ActionResult:
+        del tick
         assert action.kind == "draw"
         value = rng.randint(1, 1_000_000)
         self._values.append(value)
         return ActionResult(success=True, payload={"value": value})
+
+    def memory_deliveries(
+        self, action: ValidatedAction, result: ActionResult
+    ) -> Mapping[AgentId, Sequence[MemoryItem]]:
+        del action, result
+        return {}
 
     def snapshot(self) -> JsonObject:
         return {"values": tuple(self._values)}

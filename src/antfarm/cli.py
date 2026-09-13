@@ -46,9 +46,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     state = json.dumps(
         thaw_json(summary.final_state), sort_keys=True, separators=(",", ":")
     )
+    metrics = ""
+    if summary.metrics:
+        encoded_metrics = json.dumps(
+            thaw_json(summary.metrics), sort_keys=True, separators=(",", ":")
+        )
+        metrics = f" metrics={encoded_metrics}"
     print(
         f"run={summary.run_id} ticks={summary.ticks} "
-        f"events={len(summary.events)} final_state={state}"
+        f"events={len(summary.events)} final_state={state}{metrics}"
     )
     failures = [
         event

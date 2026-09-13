@@ -49,6 +49,36 @@ def test_memory_snapshot_restore_round_trip() -> None:
     )
 
 
+def test_memory_retention_is_bounded_per_agent() -> None:
+    memory = InMemoryMemoryStore(max_items_per_agent=2)
+
+    memory.append(
+        AgentId("alice"),
+        tuple(
+            MemoryItem(kind="result", content={"value": value})
+            for value in range(4)
+        ),
+    )
+
+    assert memory.recall(AgentId("alice"), MemoryQuery(limit=10)) == (
+        MemoryItem(kind="result", content={"value": 2}),
+        MemoryItem(kind="result", content={"value": 3}),
+    )
+
+
+def test_public_message_delivery_is_deduplicated_by_stable_id() -> None:
+    memory = InMemoryMemoryStore()
+    message = MemoryItem(
+        kind="public_message",
+        content={"id": "message-1", "sender_id": "alice", "tick": 1, "text": "hi"},
+    )
+
+    memory.append(AgentId("bob"), (message, message))
+    memory.append(AgentId("bob"), (message,))
+
+    assert memory.recall(AgentId("bob"), MemoryQuery(limit=10)) == (message,)
+
+
 def test_event_subscription_is_observational_and_cancellable() -> None:
     bus = InMemoryEventBus()
     received: list[Event] = []

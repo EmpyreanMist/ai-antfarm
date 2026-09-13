@@ -1,7 +1,8 @@
 """Scenario execution facade used by the CLI and tests."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 
 from antfarm.composition import compose
 from antfarm.config import load_scenario
@@ -15,6 +16,7 @@ class RunSummary:
     ticks: int
     final_state: JsonObject
     events: tuple[Event, ...]
+    metrics: JsonObject = field(default_factory=lambda: MappingProxyType({}))
 
 
 async def run_scenario(path: str | Path) -> RunSummary:
@@ -26,4 +28,5 @@ async def run_scenario(path: str | Path) -> RunSummary:
         ticks=config.run.ticks,
         final_state=result.snapshot.world,
         events=tuple(result.events),
+        metrics=result.snapshot.metrics,
     )

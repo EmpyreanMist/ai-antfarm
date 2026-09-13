@@ -23,6 +23,7 @@ def _failed_summary() -> RunSummary:
                 payload={"reason": "ConnectionError"},
             ),
         ),
+        metrics={"failure_count": {"total": 1}},
     )
 
 
@@ -41,6 +42,7 @@ def test_run_with_cognition_failure_returns_nonzero(
 
     assert result == 3
     assert "final_state={\"value\":0}" in captured.out
+    assert 'metrics={"failure_count":{"total":1}}' in captured.out
     assert "alice:cognition.failed(ConnectionError)" in captured.err
 
 

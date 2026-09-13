@@ -1,12 +1,13 @@
 """Finite shared-resource environment with agent-owned holdings."""
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 
-from antfarm.domain.json_values import JsonObject
+from antfarm.domain.json_values import JsonObject, freeze_object
 from antfarm.domain.models import (
     ActionProposal,
     ActionResult,
     AgentId,
+    MemoryItem,
     Observation,
     Tick,
     ValidatedAction,
@@ -24,29 +25,59 @@ class CommonsEnvironment:
         initial_resource: int,
         initial_endowment: int,
         agent_ids: Iterable[AgentId],
+        social: bool = False,
+        message_max_length: int = 500,
+        history_limit: int = 20,
+        roster_limit: int = 100,
     ) -> None:
         if initial_resource < 0 or initial_endowment < 0:
             raise ValueError("commons initial values must not be negative")
+        if message_max_length < 1 or history_limit < 1 or roster_limit < 1:
+            raise ValueError("social message limits must be positive")
         self._resource = initial_resource
         self._holdings = {
             agent_id: initial_endowment for agent_id in sorted(agent_ids, key=str)
         }
+        self._social = social
+        self._message_max_length = message_max_length
+        self._history_limit = history_limit
+        self._roster_limit = roster_limit
+        self._messages: list[JsonObject] = []
+        self._next_message_sequence = 1
 
     def observe(self, agent_id: AgentId, tick: Tick) -> Observation:
         if agent_id not in self._holdings:
             raise ValueError(f"unknown agent: {agent_id}")
+        state: dict[str, object] = {
+            "resource": self._resource,
+            "own_holding": self._holdings[agent_id],
+        }
+        if self._social:
+            visible_agents = list(self._holdings)[: self._roster_limit]
+            if agent_id not in visible_agents:
+                visible_agents[-1] = agent_id
+            state.update(
+                roster=tuple(
+                    {"id": str(member_id)}
+                    for member_id in visible_agents
+                ),
+                recent_messages=tuple(
+                    message
+                    for message in self._messages
+                    if _message_tick(message) < int(tick)
+                ),
+            )
         return Observation(
             agent_id=agent_id,
             tick=tick,
-            state={
-                "resource": self._resource,
-                "own_holding": self._holdings[agent_id],
-            },
+            state=freeze_object(state),
         )
 
     def validate(self, proposal: ActionProposal) -> ValidationResult:
         if proposal.actor_id not in self._holdings:
             return ValidationResult(action=None, reason="unknown actor")
+        if proposal.kind == "say":
+            return self._validate_speech(proposal)
         if proposal.kind not in {"harvest", "contribute"}:
             return ValidationResult(action=None, reason="unsupported action kind")
         if set(proposal.parameters) != {"amount"}:
@@ -75,8 +106,24 @@ class CommonsEnvironment:
             )
         )
 
-    def apply(self, action: ValidatedAction, rng: RandomSource) -> ActionResult:
+    def apply(
+        self, action: ValidatedAction, rng: RandomSource, tick: Tick
+    ) -> ActionResult:
         del rng
+        if action.kind == "say":
+            text = action.parameters.get("text")
+            if not self._social or not isinstance(text, str):
+                raise ValueError("validated speech is invalid")
+            message: JsonObject = {
+                "id": f"message-{self._next_message_sequence}",
+                "sender_id": str(action.actor_id),
+                "tick": int(tick),
+                "text": text,
+            }
+            self._next_message_sequence += 1
+            self._messages.append(message)
+            self._messages = self._messages[-self._history_limit :]
+            return ActionResult(success=True, payload={"message": message})
         amount = action.parameters.get("amount")
         if isinstance(amount, bool) or not isinstance(amount, int) or amount < 1:
             raise ValueError("validated commons amount must be a positive integer")
@@ -102,17 +149,37 @@ class CommonsEnvironment:
             },
         )
 
+    def memory_deliveries(
+        self, action: ValidatedAction, result: ActionResult
+    ) -> Mapping[AgentId, Sequence[MemoryItem]]:
+        if action.kind != "say":
+            return {}
+        message = result.payload.get("message")
+        if not isinstance(message, Mapping):
+            raise TypeError("speech result must contain a message")
+        item = MemoryItem(kind="public_message", content=message)
+        return {agent_id: (item,) for agent_id in self._holdings}
+
     def snapshot(self) -> JsonObject:
-        return {
+        state: dict[str, object] = {
             "resource": self._resource,
             "holdings": {
                 str(agent_id): amount for agent_id, amount in self._holdings.items()
             },
         }
+        if self._social:
+            state.update(
+                messages=tuple(self._messages),
+                next_message_sequence=self._next_message_sequence,
+            )
+        return freeze_object(state)
 
     def restore(self, state: JsonObject) -> None:
-        if set(state) != {"resource", "holdings"}:
-            raise ValueError("commons state must contain resource and holdings")
+        expected_keys = {"resource", "holdings"}
+        if self._social:
+            expected_keys.update({"messages", "next_message_sequence"})
+        if set(state) != expected_keys:
+            raise ValueError("commons state does not match its configured mode")
         resource = state["resource"]
         holdings = state["holdings"]
         if isinstance(resource, bool) or not isinstance(resource, int) or resource < 0:
@@ -129,3 +196,97 @@ class CommonsEnvironment:
             restored[AgentId(raw_agent_id)] = amount
         self._resource = resource
         self._holdings = restored
+        if self._social:
+            messages = state["messages"]
+            next_sequence = state["next_message_sequence"]
+            if not isinstance(messages, tuple):
+                raise TypeError("commons messages must be an array")
+            if (
+                isinstance(next_sequence, bool)
+                or not isinstance(next_sequence, int)
+                or next_sequence < 1
+            ):
+                raise TypeError("next message sequence must be a positive integer")
+            restored_messages = [
+                _validated_message(
+                    message,
+                    agent_ids=frozenset(str(agent_id) for agent_id in self._holdings),
+                    message_max_length=self._message_max_length,
+                )
+                for message in messages
+            ]
+            if len(restored_messages) > self._history_limit:
+                raise ValueError("commons message history exceeds configured limit")
+            message_sequences = [
+                _message_sequence(message) for message in restored_messages
+            ]
+            if len(set(message_sequences)) != len(message_sequences):
+                raise ValueError("commons message ids must be unique")
+            if message_sequences and next_sequence <= max(message_sequences):
+                raise ValueError("next message sequence must follow retained messages")
+            self._messages = restored_messages
+            self._next_message_sequence = next_sequence
+
+    def _validate_speech(self, proposal: ActionProposal) -> ValidationResult:
+        if not self._social:
+            return ValidationResult(action=None, reason="social mode is disabled")
+        if set(proposal.parameters) != {"text"}:
+            return ValidationResult(action=None, reason="text is required")
+        text = proposal.parameters["text"]
+        if not isinstance(text, str) or not text.strip():
+            return ValidationResult(action=None, reason="text must not be empty")
+        if len(text) > self._message_max_length:
+            return ValidationResult(
+                action=None,
+                reason=f"text exceeds maximum length of {self._message_max_length}",
+            )
+        return ValidationResult(
+            action=ValidatedAction(
+                actor_id=proposal.actor_id,
+                kind="say",
+                parameters={"text": text},
+            )
+        )
+
+
+def _message_tick(message: Mapping[str, object]) -> int:
+    tick = message.get("tick")
+    if isinstance(tick, bool) or not isinstance(tick, int):
+        raise TypeError("message tick must be an integer")
+    return tick
+
+
+def _message_sequence(message: Mapping[str, object]) -> int:
+    message_id = message.get("id")
+    if not isinstance(message_id, str) or not message_id.startswith("message-"):
+        raise ValueError("commons message id is invalid")
+    raw_sequence = message_id.removeprefix("message-")
+    if not raw_sequence.isdigit() or int(raw_sequence) < 1:
+        raise ValueError("commons message id is invalid")
+    return int(raw_sequence)
+
+
+def _validated_message(
+    value: object, *, agent_ids: frozenset[str], message_max_length: int
+) -> JsonObject:
+    if not isinstance(value, Mapping) or set(value) != {
+        "id",
+        "sender_id",
+        "tick",
+        "text",
+    }:
+        raise TypeError("commons message is invalid")
+    message_id = value["id"]
+    sender_id = value["sender_id"]
+    text = value["text"]
+    if not all(
+        isinstance(item, str) and item for item in (message_id, sender_id, text)
+    ):
+        raise TypeError("commons message strings must not be empty")
+    if sender_id not in agent_ids:
+        raise ValueError("commons message sender is not configured")
+    if len(text) > message_max_length:
+        raise ValueError("commons message exceeds configured length")
+    if _message_tick(value) < 0:
+        raise ValueError("commons message tick must not be negative")
+    return dict(value)

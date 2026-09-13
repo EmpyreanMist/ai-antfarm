@@ -36,6 +36,26 @@ class EventSequence(int):
 
 
 @dataclass(frozen=True, slots=True)
+class AgentIdentity:
+    """Public, immutable identity supplied to an agent's model request."""
+
+    id: AgentId
+
+
+@dataclass(frozen=True, slots=True)
+class AgentPersonality:
+    """Private, immutable personality context for one agent."""
+
+    description: str
+    traits: JsonObject = field(default_factory=lambda: MappingProxyType({}))
+
+    def __post_init__(self) -> None:
+        if not self.description:
+            raise ValueError("agent personality description must not be empty")
+        object.__setattr__(self, "traits", freeze_object(self.traits))
+
+
+@dataclass(frozen=True, slots=True)
 class ActionProposal:
     actor_id: AgentId
     kind: str
@@ -132,12 +152,14 @@ class SimulationSnapshot:
     world: JsonObject
     memory: JsonObject = field(default_factory=lambda: MappingProxyType({}))
     scheduler: JsonObject = field(default_factory=lambda: MappingProxyType({}))
+    metrics: JsonObject = field(default_factory=lambda: MappingProxyType({}))
     engine: JsonObject = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "world", freeze_object(self.world))
         object.__setattr__(self, "memory", freeze_object(self.memory))
         object.__setattr__(self, "scheduler", freeze_object(self.scheduler))
+        object.__setattr__(self, "metrics", freeze_object(self.metrics))
         object.__setattr__(self, "engine", freeze_object(self.engine))
 
 

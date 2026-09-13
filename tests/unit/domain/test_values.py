@@ -1,8 +1,9 @@
 import math
+from collections.abc import Mapping
 
 import pytest
 
-from antfarm.domain import ActionProposal, AgentId
+from antfarm.domain import ActionProposal, AgentId, AgentPersonality
 
 
 def test_json_values_are_deeply_immutable() -> None:
@@ -25,3 +26,14 @@ def test_non_finite_json_numbers_are_rejected() -> None:
             kind="increment",
             parameters={"amount": math.nan},
         )
+
+
+def test_agent_personality_traits_are_deeply_immutable() -> None:
+    personality = AgentPersonality(
+        description="Patient", traits={"preferences": {"pace": "slow"}}
+    )
+
+    preferences = personality.traits["preferences"]
+    assert isinstance(preferences, Mapping)
+    with pytest.raises(TypeError):
+        preferences["pace"] = "fast"  # type: ignore[index]

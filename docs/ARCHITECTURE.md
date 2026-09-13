@@ -23,7 +23,34 @@ Validated Scenario
 
 The engine owns the tick, event sequence, seeded random source, registry of agents, and mutation order. M0 awaits cognition sequentially and applies actions sequentially. Provider latency therefore affects throughput but cannot reorder state transitions. No mutable world object crosses into an agent or provider.
 
+Each model-backed agent resolves its public identity and optional private
+personality into immutable, provider-neutral request values. The request also
+contains only that agent's bounded recall and current agent-scoped observation.
+Agents assigned the same model reference share one provider instance, but the
+provider is stateless with respect to agent identity: private personality and
+memory are supplied afresh on every request and never enter another agent's
+observation. Mutable holdings remain owned by the environment.
+
+The commons environment has an explicit social mode with one public room. A
+model may propose `say`, but the engine remains the source of the authenticated
+actor and current tick, and the environment validates bounded non-empty text.
+Accepted messages receive deterministic IDs. Messages applied during tick T are
+excluded from every observation in T, delivered to each configured agent's
+bounded memory after cognition finishes, and become visible in bounded public
+history in T+1. Public observations contain only a bounded ID roster, shared
+resources, the observer's own holding, and recent accepted messages; personality
+and private recall never cross between agents. Text in observations and memory is
+untrusted simulation data and cannot change the action contract.
+
 Malformed output, timeout, validation failure, and rejected actions produce structured failure events and leave world state unchanged. Event subscribers run after persistence and are observational; they cannot participate in state mutation.
+
+M1 includes a closed catalog of event-derived metrics: applied-action counts by
+kind, rejection counts, cognition-failure counts by kind, and per-agent terminal
+outcomes. A collector has no environment reference. The engine projects the next
+summary without mutating the collector, stores that summary in the same atomic
+checkpoint as the step, and only then publishes the committed events that advance
+the live collector. Metric state therefore restores with the checkpoint and a
+failed commit cannot advance it.
 
 The baseline scheduler combines stable interval selection, per-agent cooldown, and optional event triggers. Intervals begin at tick one. A cooldown is the number of complete ticks skipped after an outcome. A matching actor event schedules that actor for a future tick, while an actor-less event schedules all known agents. Event-only scheduling remains idle until a matching event occurs. Scheduler state is part of every simulation snapshot.
 
@@ -31,7 +58,7 @@ The baseline scheduler combines stable interval selection, per-agent cooldown, a
 
 These signatures describe boundaries, not inheritance-heavy base classes. Concrete types may use frozen dataclasses and `typing.Protocol`.
 
-`Agent`, `Environment`, `ActionProposal`, and event values belong to `domain/`. `CognitionScheduler` and `SimulationEngine` belong to `application/`. `ModelProvider`, `MemoryStore`, `EventBus`, and `Storage` belong to `ports/`; their implementations belong to `adapters/`. The composition root resolves each agent's `model_ref` and injects the selected provider into the concrete agent without exposing adapter configuration in its public contract.
+`Agent`, `AgentIdentity`, `AgentPersonality`, `Environment`, `ActionProposal`, and event values belong to `domain/`. `CognitionScheduler` and `SimulationEngine` belong to `application/`. `ModelProvider`, `MemoryStore`, `EventBus`, and `Storage` belong to `ports/`; their implementations belong to `adapters/`. The composition root resolves each agent's `model_ref` and personality reference and injects the selected provider into the concrete agent without exposing adapter configuration in its public contract.
 
 ```python
 class ModelProvider(Protocol):
@@ -44,9 +71,14 @@ class Agent(Protocol):
     async def decide(self, context: AgentContext) -> ActionProposal | None: ...
 
 class Environment(Protocol):
-    def observe(self, agent_id: AgentId) -> Observation: ...
+    def observe(self, agent_id: AgentId, tick: Tick) -> Observation: ...
     def validate(self, proposal: ActionProposal) -> ValidationResult: ...
-    def apply(self, action: ValidatedAction, rng: RandomSource) -> ActionResult: ...
+    def apply(
+        self, action: ValidatedAction, rng: RandomSource, tick: Tick
+    ) -> ActionResult: ...
+    def memory_deliveries(
+        self, action: ValidatedAction, result: ActionResult
+    ) -> Mapping[AgentId, Sequence[MemoryItem]]: ...
     def snapshot(self) -> WorldState: ...
     def restore(self, state: WorldState) -> None: ...
 
@@ -106,14 +138,16 @@ Provider secrets are never embedded in scenarios. Configuration refers to enviro
 
 The built-in environment catalog currently contains the deterministic `counter`
 environment with `increment`, and the finite shared-resource `commons`
-environment with `harvest` and `contribute`. Scenario validation rejects action
-kinds that are incompatible with the selected environment. The composition root
-also supplies provider-neutral action descriptions to model-backed agents;
-environments remain the authority for validation and mutation.
+environment with `harvest` and `contribute`. Explicit commons social configuration
+also enables `say`, bounded message history, and a bounded public roster. Scenario
+validation rejects action kinds that are incompatible with the selected mode. The
+composition root also supplies provider-neutral action descriptions to
+model-backed agents; environments remain the authority for validation, mutation,
+and recipient selection.
 
 ## Persistence, Events, and Replay
 
-SQLite is the first `Storage` adapter. One short transaction per step stores the ordered event batch and latest checkpoint. Checkpoints, not an event fold, are the M0 recovery source of truth. Memory, scheduler, event-sequence, and pseudorandom-generator state needed to continue a run are included in the checkpoint contract.
+SQLite is the first `Storage` adapter. One short transaction per step stores the ordered event batch and latest checkpoint. Checkpoints, not an event fold, are the M0 recovery source of truth. Memory, scheduler, metric-summary, event-sequence, and pseudorandom-generator state needed to continue a run are included in the checkpoint contract.
 
 Events support audit and metrics now and prepare for replay later. A future replay reads recorded accepted actions and outcomes; it must not call a model again. Raw prompts and responses are not persisted by default because they may contain secrets or personal data. Full event sourcing, branching histories, retention automation, and Postgres are deferred.
 

@@ -95,9 +95,24 @@ def test_snapshot_round_trip() -> None:
         world={"value": 7},
         memory={"alice": ({"kind": "result", "value": 7},)},
         scheduler={"last_tick": 3},
+        metrics={"action_count": {"total": 2}},
         engine={"event_sequence": 8, "random_state": (3, (1, 2, 3), None)},
     )
 
     restored = snapshot_from_data(_through_json(snapshot_to_data(snapshot)))
 
     assert restored == snapshot
+
+
+def test_snapshot_from_before_metrics_defaults_to_empty_state() -> None:
+    snapshot = SimulationSnapshot(
+        tick=Tick(1),
+        world={"value": 1},
+        engine={"event_sequence": 1, "random_state": (3, (1, 2, 3), None)},
+    )
+    legacy_data = _through_json(snapshot_to_data(snapshot))
+    del legacy_data["metrics"]
+
+    restored = snapshot_from_data(legacy_data)
+
+    assert dict(restored.metrics) == {}

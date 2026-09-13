@@ -6,6 +6,7 @@ from random import Random
 from typing import cast
 
 from antfarm.application.agent import MalformedDecisionError
+from antfarm.application.metrics import BuiltInMetricCollector
 from antfarm.application.scheduler import CognitionScheduler, ScheduleContext
 from antfarm.domain.json_values import JsonObject
 from antfarm.domain.models import (
@@ -47,6 +48,7 @@ class SimulationEngine:
         scheduler: CognitionScheduler,
         event_bus: EventBus,
         storage: Storage,
+        metrics: BuiltInMetricCollector | None = None,
         memory_recall_limit: int = 10,
     ) -> None:
         if memory_recall_limit < 0:
@@ -58,15 +60,25 @@ class SimulationEngine:
         self._scheduler = scheduler
         self._event_bus = event_bus
         self._storage = storage
+        self._metrics = metrics or BuiltInMetricCollector(
+            (), action_kinds=(), agent_ids=tuple(str(agent_id) for agent_id in agents)
+        )
+        if self._metrics.event_kinds:
+            self._event_bus.subscribe(self._metrics.event_kinds, self._metrics.observe)
         self._memory_recall_limit = memory_recall_limit
         self._rng = Random(seed)
         self._tick = Tick(0)
         self._sequence = 0
 
+    @property
+    def metrics(self) -> BuiltInMetricCollector:
+        return self._metrics
+
     async def step(self) -> StepResult:
         tick = Tick(int(self._tick) + 1)
         events: list[Event] = [self._event(tick, "tick.started")]
         outcomes: list[CognitionOutcome] = []
+        pending_memory: dict[AgentId, list[MemoryItem]] = {}
         selected = self._scheduler.select(
             ScheduleContext(tick=tick, agent_ids=tuple(self._agents))
         )
@@ -202,32 +214,42 @@ class SimulationEngine:
                 payload={"kind": action.kind, "parameters": action.parameters},
             )
             events.append(validated_event)
-            result = self._environment.apply(action, self._rng)
+            result = self._environment.apply(action, self._rng, tick)
             result_event = self._event(
                 tick,
                 "action.applied",
                 actor_id=agent_id,
                 causation_id=validated_event.event_id,
-                payload=result.payload,
+                payload={**result.payload, "kind": action.kind},
             )
             events.append(result_event)
             self._memory.append(
                 agent_id,
                 (MemoryItem(kind="action_result", content=result.payload),),
             )
+            for recipient_id, items in self._environment.memory_deliveries(
+                action, result
+            ).items():
+                if recipient_id not in self._agents:
+                    raise ValueError("environment returned an unknown memory recipient")
+                pending_memory.setdefault(recipient_id, []).extend(items)
             outcomes.append(
                 CognitionOutcome(agent_id=agent_id, tick=tick, kind="applied")
             )
 
+        for recipient_id in sorted(pending_memory, key=str):
+            self._memory.append(recipient_id, tuple(pending_memory[recipient_id]))
         self._scheduler.record(tuple(outcomes))
         events.append(self._event(tick, "tick.completed"))
         self._scheduler.notify(tuple(events))
         self._tick = tick
+        metric_state = self._metrics.project(tuple(events))
         snapshot = SimulationSnapshot(
             tick=tick,
             world=self._environment.snapshot(),
             memory=self._memory.snapshot(),
             scheduler=self._scheduler.snapshot(),
+            metrics=metric_state,
             engine=self._engine_state(),
         )
         committed_events = tuple(events)
@@ -241,6 +263,7 @@ class SimulationEngine:
             world=self._environment.snapshot(),
             memory=self._memory.snapshot(),
             scheduler=self._scheduler.snapshot(),
+            metrics=self._metrics.snapshot(),
             engine=self._engine_state(),
         )
 
@@ -271,6 +294,7 @@ class SimulationEngine:
         self._environment.restore(snapshot.world)
         self._memory.restore(snapshot.memory)
         self._scheduler.restore(snapshot.scheduler)
+        self._metrics.restore(snapshot.metrics)
         self._rng.setstate(
             cast(tuple[int, tuple[int, ...], float | None], tuple(random_state))
         )

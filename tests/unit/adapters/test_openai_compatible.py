@@ -6,7 +6,14 @@ from collections.abc import Mapping
 import pytest
 
 from antfarm.adapters.models import OpenAICompatibleModelProvider
-from antfarm.domain import AgentId, MemoryItem, Observation, Tick
+from antfarm.domain import (
+    AgentId,
+    AgentIdentity,
+    AgentPersonality,
+    MemoryItem,
+    Observation,
+    Tick,
+)
 from antfarm.ports.models import (
     MalformedModelResponseError,
     ModelRequest,
@@ -17,7 +24,11 @@ from antfarm.ports.models import (
 def _request() -> ModelRequest:
     agent_id = AgentId("alice")
     return ModelRequest(
-        actor_id=agent_id,
+        identity=AgentIdentity(id=agent_id),
+        personality=AgentPersonality(
+            description="A patient steward.",
+            traits={"patience": "high"},
+        ),
         observation=Observation(
             agent_id=agent_id,
             tick=Tick(3),
@@ -98,7 +109,6 @@ def test_structured_request_and_response_use_provider_neutral_values() -> None:
     ]["enum"] == ["increment", None]
     context = json.loads(body["messages"][1]["content"])
     assert context == {
-        "actor_id": "alice",
         "available_actions": [
             {
                 "description": "Increase the counter.",
@@ -106,8 +116,17 @@ def test_structured_request_and_response_use_provider_neutral_values() -> None:
                 "parameters": {"amount": "A positive integer."},
             }
         ],
-        "memories": [{"content": {"value": 6}, "kind": "action_result"}],
+        "identity": {"id": "alice"},
         "observation": {"state": {"value": 7}, "tick": 3},
+        "private_context": {
+            "memories": [
+                {"content": {"value": 6}, "kind": "action_result"}
+            ],
+            "personality": {
+                "description": "A patient steward.",
+                "traits": {"patience": "high"},
+            },
+        },
     }
 
 

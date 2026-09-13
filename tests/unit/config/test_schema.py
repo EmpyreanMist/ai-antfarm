@@ -162,7 +162,12 @@ def test_complete_schema_represents_deferred_configuration() -> None:
             "action_refs": ["increment"],
         }
     ]
-    data["metrics"] = ["action_count", "rejection_count"]
+    data["metrics"] = [
+        "action_count",
+        "rejection_count",
+        "failure_count",
+        "agent_outcomes",
+    ]
     data["storage"] = {"kind": "sqlite", "path": "runs.db"}
     data["observability"] = {"event_detail": "failures", "include_model_io": False}
 
@@ -170,7 +175,12 @@ def test_complete_schema_represents_deferred_configuration() -> None:
 
     assert config.models["local-model"].provider_ref == "remote"
     assert config.storage.kind == "sqlite"
-    assert config.metrics == ("action_count", "rejection_count")
+    assert config.metrics == (
+        "action_count",
+        "rejection_count",
+        "failure_count",
+        "agent_outcomes",
+    )
 
 
 def test_normalized_json_is_canonical_and_contains_expanded_agents() -> None:
@@ -253,4 +263,42 @@ def test_environment_rejects_an_incompatible_action_family() -> None:
     data["actions"] = [{"kind": "harvest"}]
 
     with pytest.raises(ValidationError, match="does not support actions: harvest"):
+        ScenarioConfig.model_validate(data)
+
+
+def test_social_commons_explicitly_enables_speech() -> None:
+    data = _valid_data()
+    data["providers"] = {
+        "scripted": {
+            "kind": "mock",
+            "decisions": {"alice": [{"kind": "say", "parameters": {"text": "hi"}}]},
+        }
+    }
+    data["actions"] = [{"kind": "say"}, {"kind": "harvest"}]
+    data["environment"] = {
+        "kind": "commons",
+        "initial_resource": 3,
+        "social": {"message_max_length": 40, "history_limit": 2},
+    }
+    data["memory"] = {
+        "kind": "in_memory",
+        "recall_limit": 2,
+        "retention_limit": 4,
+    }
+
+    config = ScenarioConfig.model_validate(data)
+
+    assert config.environment.kind == "commons"
+    assert config.environment.social is not None
+    assert config.environment.social.history_limit == 2
+    assert config.memory.retention_limit == 4
+
+
+def test_speech_requires_social_commons_mode() -> None:
+    data = _valid_data()
+    data["providers"] = {"scripted": {"kind": "mock", "decisions": {}}}
+    data["actions"] = [{"kind": "say"}]
+    data["environment"] = {"kind": "commons", "initial_resource": 3}
+
+    with pytest.raises(ValidationError, match="does not support actions: say"):
         ScenarioConfig.model_validate(data)
