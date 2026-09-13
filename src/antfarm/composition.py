@@ -14,6 +14,7 @@ from antfarm.application.agent import ModelBackedAgent
 from antfarm.application.engine import SimulationEngine
 from antfarm.application.scheduler import StableScheduler
 from antfarm.config.schema import (
+    CommonsEnvironmentConfig,
     MockProviderConfig,
     OpenAICompatibleProviderConfig,
     ScenarioConfig,
@@ -21,7 +22,8 @@ from antfarm.config.schema import (
 )
 from antfarm.domain.json_values import JsonObject
 from antfarm.domain.models import AgentId, RunId, RunMetadata
-from antfarm.environments import CounterEnvironment
+from antfarm.domain.protocols import Environment
+from antfarm.environments import CommonsEnvironment, CounterEnvironment
 from antfarm.ports.models import ModelProvider, ModelResponse
 from antfarm.ports.storage import Storage
 
@@ -58,16 +60,26 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
         providers[provider_id] = MockModelProvider(decisions)
 
     resolved_agents = config.expand_agents()
-    available_actions: tuple[JsonObject, ...] = tuple(
-        {
-            "kind": action.kind,
+    action_catalog: dict[str, JsonObject] = {
+        "increment": {
+            "kind": "increment",
             "description": "Increase the shared counter.",
+            "parameters": {"amount": "A positive integer."},
+        },
+        "harvest": {
+            "kind": "harvest",
+            "description": "Move resource from the commons to your holding.",
+            "parameters": {"amount": "A positive integer no greater than resource."},
+        },
+        "contribute": {
+            "kind": "contribute",
+            "description": "Move resource from your holding into the commons.",
             "parameters": {
-                "amount": "A positive integer specifying the increase."
+                "amount": "A positive integer no greater than own_holding."
             },
-        }
-        for action in config.actions
-    )
+        },
+    }
+    available_actions = tuple(action_catalog[action.kind] for action in config.actions)
     used_model_ids = sorted({agent.model_ref for agent in resolved_agents})
     models: dict[str, ModelProvider] = {}
     for model_id in used_model_ids:
@@ -119,14 +131,23 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
         config.normalized_data(),
     )
     event_bus = InMemoryEventBus()
+    environment: Environment
+    if isinstance(config.environment, CommonsEnvironmentConfig):
+        environment = CommonsEnvironment(
+            initial_resource=config.environment.initial_resource,
+            initial_endowment=config.environment.initial_endowment,
+            agent_ids=agents,
+        )
+    else:
+        environment = CounterEnvironment(
+            initial_value=config.environment.initial_value,
+            agent_ids=agents,
+        )
     engine = SimulationEngine(
         run_id=run_id,
         seed=config.run.seed,
         agents=agents,
-        environment=CounterEnvironment(
-            initial_value=config.environment.initial_value,
-            agent_ids=agents,
-        ),
+        environment=environment,
         memory=InMemoryMemoryStore(),
         scheduler=StableScheduler(
             interval=config.scheduling.interval,

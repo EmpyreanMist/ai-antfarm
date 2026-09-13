@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from ruamel.yaml.error import YAMLError
 
 from antfarm.config import load_scenario
+from antfarm.domain.json_values import thaw_json
 from antfarm.runner import run_scenario
 
 
@@ -42,7 +43,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"runtime error: {type(error).__name__}: {error}", file=sys.stderr)
         return 1
 
-    state = json.dumps(dict(summary.final_state), sort_keys=True, separators=(",", ":"))
+    state = json.dumps(
+        thaw_json(summary.final_state), sort_keys=True, separators=(",", ":")
+    )
     print(
         f"run={summary.run_id} ticks={summary.ticks} "
         f"events={len(summary.events)} final_state={state}"

@@ -109,9 +109,72 @@ M0 proves a deterministic, local-first vertical slice. Each item below is issue-
 
 **Non-goals:** REST, WebSockets, dashboards, interactive editing, or full replay tooling.
 
+## Milestone M1: Experimentation
+
+M1 turns the foundation into a small experiment workbench while preserving the
+deterministic engine and provider-independent core.
+
+## M1 Progress
+
+- **M1-01 — Complete:** the finite shared-resource commons environment,
+  harvest/contribute action family, compatibility validation, snapshot recovery,
+  and deterministic end-to-end example are implemented.
+- **M1-02 — Next:** add richer built-in event-derived metrics and persist their
+  summaries without allowing collectors to mutate simulation state.
+- **M1-03 — Planned:** compare completed runs using normalized scenario metadata,
+  final state, event outcomes, and metric summaries.
+- **M1-04 — Planned:** replay recorded accepted actions and outcomes without
+  invoking model providers.
+
+### M1-01: Multiple Built-in Environments and Actions
+
+**Acceptance criteria**
+
+- A finite shared-resource environment adds agent-scoped holdings and a common
+  resource alongside the existing counter environment.
+- Harvest and contribute actions are validated by the environment and applied in
+  deterministic engine order.
+- Scenario validation rejects environment/action mismatches before composition.
+- The environment supports snapshot/restore and a documented deterministic
+  example runs end to end.
+
+**Non-goals:** dynamic plugins, user-imported Python, economic realism, markets,
+or changing the engine-owned mutation lifecycle.
+
+### M1-02: Built-in Metrics
+
+**Acceptance criteria**
+
+- Built-in metrics consume committed events observationally.
+- Action, rejection, failure, and per-agent outcome summaries are deterministic.
+- Metric state can be persisted and inspected without changing world state.
+
+**Non-goals:** arbitrary metric plugins, dashboards, or external telemetry.
+
+### M1-03: Run Comparison
+
+**Acceptance criteria**
+
+- Completed durable runs can be compared from the CLI.
+- Comparisons identify scenario, final-state, outcome, and metric differences in
+  a stable machine-readable format.
+- Missing and incompatible runs fail clearly.
+
+**Non-goals:** statistical inference, experiment scheduling, or a web UI.
+
+### M1-04: Recorded-Action Replay
+
+**Acceptance criteria**
+
+- Replay uses recorded accepted actions and outcomes and never invokes a model.
+- Replayed logical events and final state match the source run where compatible.
+- Schema or environment incompatibility fails before partial replay mutation.
+
+**Non-goals:** branching histories, editing event logs, or reproducing provider
+text generation.
+
 ## Later Milestone Themes
 
-- **M1 — Experimentation:** multiple environment/action implementations, richer built-in metrics, run comparison, and recorded-action replay.
 - **M2 — Observation:** REST control/query API and, only when demanded by a live client, WebSocket event streaming.
 - **M3 — Integrations:** concrete provider adapters and an evidence-led OASIS/CAMEL compatibility spike.
 - **M4 — Scale:** profiling-led parallel cognition, Postgres, workers, retention policies, and larger simulations.

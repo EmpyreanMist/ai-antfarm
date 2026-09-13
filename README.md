@@ -18,6 +18,7 @@ The foundation currently includes:
 - Bounded, agent-scoped in-memory recall with snapshot/restore
 - Atomic SQLite event batches and deterministic checkpoint recovery
 - A generic OpenAI-compatible provider with structured responses and timeouts
+- Counter and shared-commons environments with validated action families
 - An offline example scenario with unit and end-to-end tests
 
 The repository bootstrap, strict scenario schema, core contracts, deterministic
@@ -40,6 +41,20 @@ The example runs entirely offline and produces:
 
 ```text
 run=minimal ticks=1 events=10 final_state={"value":3}
+```
+
+The deterministic commons example exercises two agents, shared-resource
+contention, and contributions:
+
+```console
+uv run antfarm validate scenarios/examples/commons.yaml
+uv run antfarm run scenarios/examples/commons.yaml
+```
+
+It produces:
+
+```text
+run=commons-example ticks=2 events=20 final_state={"holdings":{"alice":2,"bob":1},"resource":2}
 ```
 
 `inspect` prints the canonical scenario JSON, including deterministically expanded

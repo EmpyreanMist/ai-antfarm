@@ -1,10 +1,10 @@
-# M0 Architecture
+# AntFarm Architecture
 
 ## Context and Boundaries
 
 AntFarm AI uses a ports-and-adapters architecture. The domain owns simulation concepts; the application layer coordinates them; adapters handle model APIs, memory implementations, persistence, and future transports. Imports point inward: domain code must not import adapters, databases, HTTP clients, OASIS, CAMEL, or provider SDKs.
 
-The M0 execution topology is one Python 3.12+ process with one simulation engine and one SQLite writer. The public surface is an installable library plus a small CLI. REST, WebSockets, UI code, distributed workers, and dynamic plugin discovery are outside M0.
+The current execution topology is one Python 3.12+ process with one simulation engine and one SQLite writer. The public surface is an installable library plus a small CLI. REST, WebSockets, UI code, distributed workers, and dynamic plugin discovery remain outside the current milestone.
 
 ## Simulation Lifecycle
 
@@ -103,6 +103,13 @@ The versioned `ScenarioConfig` contains:
 - Simulation rules, built-in metric identifiers, observability policy, and storage settings
 
 Provider secrets are never embedded in scenarios. Configuration refers to environment-variable names. Component kinds resolve through a closed registry in the composition root; scenario files cannot name arbitrary Python imports.
+
+The built-in environment catalog currently contains the deterministic `counter`
+environment with `increment`, and the finite shared-resource `commons`
+environment with `harvest` and `contribute`. Scenario validation rejects action
+kinds that are incompatible with the selected environment. The composition root
+also supplies provider-neutral action descriptions to model-backed agents;
+environments remain the authority for validation and mutation.
 
 ## Persistence, Events, and Replay
 

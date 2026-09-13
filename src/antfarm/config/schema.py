@@ -4,7 +4,14 @@ import json
 from collections.abc import Sequence
 from typing import Annotated, Literal, Self, cast
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeInt,
+    PositiveInt,
+    model_validator,
+)
 
 Identifier = Annotated[str, Field(min_length=1, pattern=r"^[a-z][a-z0-9_-]*$")]
 EventKind = Annotated[str, Field(min_length=1, pattern=r"^[a-z][a-z0-9_.-]*$")]
@@ -84,13 +91,39 @@ class ResolvedAgentConfig(StrictModel):
     pool_ref: Identifier | None = None
 
 
-class ActionConfig(StrictModel):
+class IncrementActionConfig(StrictModel):
     kind: Literal["increment"]
+
+
+class HarvestActionConfig(StrictModel):
+    kind: Literal["harvest"]
+
+
+class ContributeActionConfig(StrictModel):
+    kind: Literal["contribute"]
+
+
+ActionConfig = Annotated[
+    IncrementActionConfig | HarvestActionConfig | ContributeActionConfig,
+    Field(discriminator="kind"),
+]
 
 
 class CounterEnvironmentConfig(StrictModel):
     kind: Literal["counter"]
     initial_value: int = 0
+
+
+class CommonsEnvironmentConfig(StrictModel):
+    kind: Literal["commons"]
+    initial_resource: NonNegativeInt
+    initial_endowment: NonNegativeInt = 0
+
+
+EnvironmentConfig = Annotated[
+    CounterEnvironmentConfig | CommonsEnvironmentConfig,
+    Field(discriminator="kind"),
+]
 
 
 class MemoryConfig(StrictModel):
@@ -153,7 +186,7 @@ class ScenarioConfig(StrictModel):
     agents: tuple[AgentConfig, ...] = ()
     agent_pools: tuple[AgentPoolConfig, ...] = ()
     actions: tuple[ActionConfig, ...]
-    environment: CounterEnvironmentConfig
+    environment: EnvironmentConfig
     memory: MemoryConfig
     scheduling: SchedulingConfig
     rules: tuple[RuleConfig, ...] = ()
@@ -200,6 +233,17 @@ class ScenarioConfig(StrictModel):
             raise ValueError("at least one action is required")
         self._require_unique("action kinds", action_kinds)
         action_kind_set = set(action_kinds)
+        supported_actions = {
+            "counter": {"increment"},
+            "commons": {"harvest", "contribute"},
+        }[self.environment.kind]
+        incompatible_actions = action_kind_set.difference(supported_actions)
+        if incompatible_actions:
+            names = ", ".join(sorted(incompatible_actions))
+            raise ValueError(
+                f"environment {self.environment.kind!r} does not support actions: "
+                f"{names}"
+            )
         self._require_unique("rule identifiers", [rule.id for rule in self.rules])
         for rule in self.rules:
             unknown_actions = set(rule.action_refs).difference(action_kind_set)

@@ -229,3 +229,28 @@ def test_unsupported_component_kinds_are_rejected() -> None:
 
     with pytest.raises(ValidationError, match="storage"):
         ScenarioConfig.model_validate(data)
+
+
+def test_commons_environment_accepts_its_action_family() -> None:
+    data = _valid_data()
+    data["providers"] = {"scripted": {"kind": "mock", "decisions": {}}}
+    data["actions"] = [{"kind": "harvest"}, {"kind": "contribute"}]
+    data["environment"] = {
+        "kind": "commons",
+        "initial_resource": 10,
+        "initial_endowment": 2,
+    }
+
+    config = ScenarioConfig.model_validate(data)
+
+    assert config.environment.kind == "commons"
+    assert {action.kind for action in config.actions} == {"harvest", "contribute"}
+
+
+def test_environment_rejects_an_incompatible_action_family() -> None:
+    data = _valid_data()
+    data["providers"] = {"scripted": {"kind": "mock", "decisions": {}}}
+    data["actions"] = [{"kind": "harvest"}]
+
+    with pytest.raises(ValidationError, match="does not support actions: harvest"):
+        ScenarioConfig.model_validate(data)

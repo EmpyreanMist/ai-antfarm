@@ -1,0 +1,45 @@
+schema_version: 1
+run:
+  id: commons-example
+  seed: 29
+  ticks: 2
+providers:
+  scripted:
+    kind: mock
+    decisions:
+      alice:
+        - kind: harvest
+          parameters:
+            amount: 3
+        - kind: contribute
+          parameters:
+            amount: 1
+      bob:
+        - kind: harvest
+          parameters:
+            amount: 2
+        - kind: contribute
+          parameters:
+            amount: 1
+models:
+  deterministic:
+    provider_ref: scripted
+    model: fixed-decisions
+agents:
+  - id: alice
+    model_ref: deterministic
+  - id: bob
+    model_ref: deterministic
+actions:
+  - kind: harvest
+  - kind: contribute
+environment:
+  kind: commons
+  initial_resource: 5
+  initial_endowment: 0
+memory:
+  kind: in_memory
+scheduling:
+  kind: stable
+storage:
+  kind: memory
