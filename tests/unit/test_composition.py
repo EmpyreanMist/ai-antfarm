@@ -68,11 +68,15 @@ class _RecordingProvider:
     def __init__(self, **kwargs: object) -> None:
         del kwargs
         self.requests: list[ModelRequest] = []
+        self.close_count = 0
         self.instances.append(self)
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
         self.requests.append(request)
         return ModelResponse(action_kind="increment", parameters={"amount": 1})
+
+    async def close(self) -> None:
+        self.close_count += 1
 
 
 def test_composition_shares_backend_but_keeps_agent_context_isolated(
@@ -85,8 +89,10 @@ def test_composition_shares_backend_but_keeps_agent_context_isolated(
     simulation = composition.compose(_shared_model_config())
 
     asyncio.run(simulation.engine.run(limit=RunLimit(ticks=2)))
+    asyncio.run(simulation.close())
 
     assert len(_RecordingProvider.instances) == 1
+    assert _RecordingProvider.instances[0].close_count == 1
     requests = _RecordingProvider.instances[0].requests
     assert [request.identity.id for request in requests] == [
         AgentId("alice"),

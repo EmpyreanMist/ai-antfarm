@@ -14,7 +14,7 @@ The foundation currently includes:
 - Immutable domain values and provider-independent protocols
 - A deterministic mock model, counter environment, and validated-action engine
 - Ordered failure, timeout, rejection, no-op, and applied-action events
-- Interval, cooldown, and event-triggered scheduling with restorable state
+- Fair budgeted scheduling with cadence overrides, staggering, wakeups, and retries
 - Bounded, agent-scoped in-memory recall with snapshot/restore
 - Atomic SQLite event batches and deterministic checkpoint recovery
 - A generic OpenAI-compatible provider with structured responses and timeouts
@@ -24,11 +24,12 @@ The foundation currently includes:
 - Multi-agent scenarios that share one local model backend without sharing recall
 - Opt-in public speech with authenticated senders and next-tick visibility
 - Bounded public rosters, message history, and per-agent retained memory
+- Paced continuous execution with atomic cancellation and bounded live event buffers
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, and M2-01/M2-02 are complete. The next milestone adds paced
-continuous execution, fair bounded cognition, recovery on failed commits, and
-safe stopping. See [the roadmap](docs/ROADMAP.md) for current progress.
+M0, M1-01/M1-02, and M2-01 through M2-03 are complete. The next milestone adds
+live rendering of committed society events. See [the roadmap](docs/ROADMAP.md)
+for current progress.
 
 ## Quick Start
 
@@ -175,6 +176,54 @@ persisted messages, zero malformed/failed/timed-out cognitions, one rejected
 action, and no unintended world-state mutation. The small model's dialogue was
 simplistic and sometimes self-referential, but that is a model-quality limitation,
 not a failure of the social action or structured-output pipeline.
+
+## Run Continuously and Stop Safely
+
+Continuous mode is explicit; scenarios remain finite unless `--continuous` is
+passed. The included mock and Ollama examples use staggered three-tick cadence,
+one cognition per tick, capped failure retry cooldowns, bounded live buffers, and
+SQLite checkpoints:
+
+```console
+uv run antfarm validate scenarios/examples/continuous-social-mock.yaml
+uv run antfarm run scenarios/examples/continuous-social-mock.yaml --continuous --tick-seconds 1
+
+uv run antfarm validate scenarios/examples/continuous-social-ollama.yaml
+uv run antfarm run scenarios/examples/continuous-social-ollama.yaml --continuous --tick-seconds 1
+```
+
+Press Ctrl+C during either run. AntFarm stops scheduling cognition, cancels an
+in-flight HTTP request by closing its connection, discards any uncommitted step,
+closes provider/storage resources, and reports the last committed tick. A step
+that is already committing finishes atomically. Continuous mode does not retain
+all event batches in memory; the configured event bus window is bounded and the
+SQLite event log remains complete.
+
+The example database and run ID are intentionally fixed for inspectability. Before
+repeating a run, remove its generated `.db` file or copy the scenario and choose a
+fresh `run.id` and storage path. Full live dialogue rendering is M2-04; M2-03 emits
+lifecycle and final checkpoint status only.
+
+Inspect the final continuous checkpoint from the repository root:
+
+```powershell
+@'
+from antfarm.adapters.storage import SQLiteStorage
+from antfarm.domain import RunId
+
+with SQLiteStorage("continuous-social-ollama.db") as storage:
+    checkpoint = storage.load_latest(RunId("continuous-social-ollama"))
+    if checkpoint is not None:
+        print("tick", checkpoint.snapshot.tick)
+        print("world", dict(checkpoint.snapshot.world))
+        print("scheduler", dict(checkpoint.snapshot.scheduler))
+'@ | uv run python -
+```
+
+If Ollama becomes unavailable, cognition failures commit without action effects
+and retries back off deterministically up to the configured cap. Healthy agents
+continue receiving their fair share of the per-tick budget. A storage failure
+stops the run after restoring the previous complete checkpoint.
 
 To route only Charlie to a second local model, first pull that model, then copy the
 `qwen-local` entry under `models` to a new key, change its `model` tag, and set

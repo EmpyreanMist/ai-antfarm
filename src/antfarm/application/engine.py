@@ -75,6 +75,18 @@ class SimulationEngine:
         return self._metrics
 
     async def step(self) -> StepResult:
+        """Advance atomically, restoring all live state if commit is not reached."""
+
+        preceding = self.snapshot()
+        try:
+            result = await self._step()
+        except BaseException:
+            self.restore(preceding)
+            raise
+        self._event_bus.publish(result.events)
+        return result
+
+    async def _step(self) -> StepResult:
         tick = Tick(int(self._tick) + 1)
         events: list[Event] = [self._event(tick, "tick.started")]
         outcomes: list[CognitionOutcome] = []
@@ -254,7 +266,6 @@ class SimulationEngine:
         )
         committed_events = tuple(events)
         self._storage.commit_step(self._run_id, snapshot, committed_events)
-        self._event_bus.publish(committed_events)
         return StepResult(snapshot=snapshot, events=committed_events)
 
     def snapshot(self) -> SimulationSnapshot:

@@ -52,7 +52,30 @@ checkpoint as the step, and only then publishes the committed events that advanc
 the live collector. Metric state therefore restores with the checkpoint and a
 failed commit cannot advance it.
 
-The baseline scheduler combines stable interval selection, per-agent cooldown, and optional event triggers. Intervals begin at tick one. A cooldown is the number of complete ticks skipped after an outcome. A matching actor event schedules that actor for a future tick, while an actor-less event schedules all known agents. Event-only scheduling remains idle until a matching event occurs. Scheduler state is part of every simulation snapshot.
+The scheduler combines stable intervals, per-agent or per-pool cadence overrides,
+deterministic starting offsets, cooldowns, optional event triggers, capped failure
+retry cooldowns, and a cognition budget. Due agents remain in a bounded set and a
+checkpointed cursor rotates fairly through stable IDs. Accepted public speech
+wakes its recipients, excluding its speaker, for a future eligible tick. Matching
+configured actor events retain their existing actor semantics, while actor-less
+events schedule all known agents. Event-only scheduling remains idle until a
+matching event occurs. Due state, offsets, cooldowns, retry state, and the fairness
+cursor are part of every simulation snapshot.
+
+Finite execution remains unpaced. An explicit continuous application runner calls
+one `engine.step()` at a time and uses a monotonic clock to enforce a minimum
+interval between tick starts. Slow steps create no catch-up debt. It emits each
+committed batch to an optional consumer without accumulating a `RunResult` event
+history; the process-local bus retains only a configured bounded window while
+SQLite remains the durable append-only audit.
+
+Before each step, the engine captures its last complete state. Cancellation or a
+commit failure restores world, memory, scheduler, metrics, tick, event sequence,
+and random state before the error leaves the engine. Subscriber failures are
+isolated after commit and cannot retry or roll back an action. The generic
+OpenAI-compatible adapter uses cancellable asyncio HTTP connections, so timeout or
+task cancellation closes the in-flight socket instead of leaving worker-thread
+requests running.
 
 ## Core Contracts
 
@@ -64,6 +87,7 @@ These signatures describe boundaries, not inheritance-heavy base classes. Concre
 class ModelProvider(Protocol):
     capabilities: ProviderCapabilities
     async def generate(self, request: ModelRequest) -> ModelResponse: ...
+    async def close(self) -> None: ...
 
 class Agent(Protocol):
     id: AgentId
@@ -105,6 +129,7 @@ class SimulationEngine:
     def snapshot(self) -> SimulationSnapshot: ...
 
 class Storage(Protocol):
+    def close(self) -> None: ...
     def create_run(self, metadata: RunMetadata, scenario: JsonObject) -> None: ...
     def commit_step(
         self,

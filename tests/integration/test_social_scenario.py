@@ -7,7 +7,7 @@ import pytest
 import antfarm.composition as composition
 from antfarm.adapters.storage import SQLiteStorage
 from antfarm.config.schema import ScenarioConfig
-from antfarm.domain import RunId, RunLimit
+from antfarm.domain import AgentId, RunId, RunLimit
 from antfarm.domain.json_values import JsonObject
 from antfarm.ports.models import ModelRequest, ModelResponse, ProviderCapabilities
 from antfarm.runner import run_scenario
@@ -64,6 +64,25 @@ def test_social_ollama_example_validates_without_network() -> None:
         "contribute",
         "say",
     }
+
+
+def test_continuous_example_composes_one_staggered_cognition_per_tick() -> None:
+    from antfarm.config import load_scenario
+
+    source = load_scenario(
+        REPOSITORY / "scenarios/examples/continuous-social-mock.yaml"
+    )
+    data = source.model_dump(mode="json")
+    data["run"] = {"id": "continuous-composition", "seed": 79, "ticks": 3}
+    data["storage"] = {"kind": "memory"}
+    simulation = composition.compose(ScenarioConfig.model_validate(data))
+
+    first = asyncio.run(simulation.engine.step())
+
+    observations = [
+        event for event in first.events if event.kind == "observation.created"
+    ]
+    assert [event.actor_id for event in observations] == [AgentId("alice")]
 
 
 def test_sqlite_retains_speech_after_it_leaves_live_context(tmp_path: Path) -> None:

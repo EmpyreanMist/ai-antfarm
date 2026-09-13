@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import json
+import math
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -12,15 +13,26 @@ from ruamel.yaml.error import YAMLError
 
 from antfarm.config import load_scenario
 from antfarm.domain.json_values import thaw_json
-from antfarm.runner import run_scenario
+from antfarm.runner import run_continuous_scenario, run_scenario
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a finite positive number")
+    return parsed
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="antfarm")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("validate", "run", "inspect"):
+    for name in ("validate", "inspect"):
         command = commands.add_parser(name)
         command.add_argument("scenario", type=Path)
+    run = commands.add_parser("run")
+    run.add_argument("scenario", type=Path)
+    run.add_argument("--continuous", action="store_true")
+    run.add_argument("--tick-seconds", type=_positive_float, default=1.0)
     return parser
 
 
@@ -35,7 +47,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             config = load_scenario(args.scenario)
             print(config.normalized_json())
             return 0
-        summary = asyncio.run(run_scenario(args.scenario))
+        if args.continuous:
+            print(
+                f"continuous; tick interval >= {args.tick_seconds:g}s; "
+                "Ctrl+C to stop",
+                flush=True,
+            )
+            summary = asyncio.run(
+                run_continuous_scenario(
+                    args.scenario, tick_seconds=args.tick_seconds
+                )
+            )
+            print(f"stopped; last committed tick={summary.ticks}")
+        else:
+            summary = asyncio.run(run_scenario(args.scenario))
     except (OSError, ValueError, ValidationError, YAMLError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

@@ -260,10 +260,14 @@ class _RandomEnvironment:
 
 
 def _engine(
-    decisions: Mapping[AgentId, object], *, seed: int = 11
+    decisions: Mapping[AgentId, object],
+    *,
+    seed: int = 11,
+    storage: InMemoryStorage | None = None,
+    event_bus: InMemoryEventBus | None = None,
 ) -> tuple[SimulationEngine, _RecordingScheduler]:
     run_id = RunId("engine-test")
-    storage = InMemoryStorage()
+    storage = storage or InMemoryStorage()
     storage.create_run(RunMetadata(run_id=run_id, seed=seed), {})
     scheduler = _RecordingScheduler()
     agents: dict[AgentId, Agent] = {
@@ -278,7 +282,7 @@ def _engine(
             environment=_RandomEnvironment(tuple(agents)),
             memory=InMemoryMemoryStore(),
             scheduler=scheduler,
-            event_bus=InMemoryEventBus(),
+            event_bus=event_bus or InMemoryEventBus(),
             storage=storage,
         ),
         scheduler,
@@ -378,3 +382,78 @@ def test_checkpoint_restore_continues_random_and_event_sequences() -> None:
     actual = asyncio.run(restored.step())
 
     assert actual == expected
+
+
+class _FailingStorage(InMemoryStorage):
+    def commit_step(self, *args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise OSError("disk full")
+
+
+def test_failed_commit_restores_all_live_engine_state() -> None:
+    alice = AgentId("alice")
+    storage = _FailingStorage()
+    engine, _ = _engine(
+        {alice: ActionProposal(actor_id=alice, kind="draw")}, storage=storage
+    )
+    before = engine.snapshot()
+
+    with pytest.raises(OSError, match="disk full"):
+        asyncio.run(engine.step())
+
+    assert engine.snapshot() == before
+    assert storage.events[RunId("engine-test")] == []
+
+
+def test_cancellation_discards_uncommitted_sequence_and_state() -> None:
+    alice = AgentId("alice")
+    engine, _ = _engine({alice: asyncio.CancelledError()})
+    before = engine.snapshot()
+
+    async def cancel_step() -> None:
+        with pytest.raises(asyncio.CancelledError):
+            await engine.step()
+
+    asyncio.run(cancel_step())
+
+    assert engine.snapshot() == before
+
+
+def test_post_commit_observer_failure_is_isolated() -> None:
+    simulation = compose(_config())
+
+    def broken_observer(event: Event) -> None:
+        del event
+        raise RuntimeError("observer broke")
+
+    simulation.event_bus.subscribe({"action.applied"}, broken_observer)
+
+    result = asyncio.run(simulation.engine.step())
+
+    assert result.snapshot.tick == Tick(1)
+    assert dict(result.snapshot.world) == {"value": 5}
+    assert simulation.event_bus.observer_errors == ["RuntimeError"]
+
+
+class _RaisingEventBus(InMemoryEventBus):
+    def publish(self, events: Sequence[Event]) -> None:
+        super().publish(events)
+        raise RuntimeError("publish failed after commit")
+
+
+def test_post_commit_bus_failure_does_not_roll_back_or_retry() -> None:
+    alice = AgentId("alice")
+    storage = InMemoryStorage()
+    engine, _ = _engine(
+        {alice: ActionProposal(actor_id=alice, kind="draw")},
+        storage=storage,
+        event_bus=_RaisingEventBus(),
+    )
+
+    with pytest.raises(RuntimeError, match="publish failed after commit"):
+        asyncio.run(engine.step())
+
+    checkpoint = storage.load_latest(RunId("engine-test"))
+    assert checkpoint is not None
+    assert engine.snapshot() == checkpoint.snapshot
+    assert engine.snapshot().tick == Tick(1)

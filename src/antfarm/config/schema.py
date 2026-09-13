@@ -75,6 +75,7 @@ class AgentConfig(StrictModel):
     id: Identifier
     model_ref: Identifier
     personality_ref: Identifier | None = None
+    cognition_interval: PositiveInt | None = None
 
 
 class AgentPoolConfig(StrictModel):
@@ -82,6 +83,7 @@ class AgentPoolConfig(StrictModel):
     count: PositiveInt
     model_ref: Identifier
     personality_ref: Identifier | None = None
+    cognition_interval: PositiveInt | None = None
 
 
 class ResolvedAgentConfig(StrictModel):
@@ -89,6 +91,7 @@ class ResolvedAgentConfig(StrictModel):
     model_ref: Identifier
     personality_ref: Identifier | None = None
     pool_ref: Identifier | None = None
+    cognition_interval: PositiveInt | None = None
 
 
 class IncrementActionConfig(StrictModel):
@@ -151,6 +154,9 @@ class SchedulingConfig(StrictModel):
     interval: PositiveInt | None = 1
     cooldown: Annotated[int, Field(ge=0)] = 0
     event_kinds: tuple[EventKind, ...] = ()
+    stagger: bool = False
+    max_cognitions_per_tick: PositiveInt | None = None
+    failure_retry_cooldown_max: PositiveInt = 8
 
     @model_validator(mode="after")
     def has_a_due_strategy(self) -> Self:
@@ -191,6 +197,7 @@ StorageConfig = Annotated[
 class ObservabilityConfig(StrictModel):
     event_detail: Literal["failures", "all"] = "all"
     include_model_io: Literal[False] = False
+    event_buffer_limit: PositiveInt = 1000
 
 
 class ScenarioConfig(StrictModel):
@@ -304,6 +311,7 @@ class ScenarioConfig(StrictModel):
                 id=agent.id,
                 model_ref=agent.model_ref,
                 personality_ref=agent.personality_ref,
+                cognition_interval=agent.cognition_interval,
             )
             for agent in self.agents
         ]
@@ -315,6 +323,7 @@ class ScenarioConfig(StrictModel):
                     model_ref=pool.model_ref,
                     personality_ref=pool.personality_ref,
                     pool_ref=pool.id_prefix,
+                    cognition_interval=pool.cognition_interval,
                 )
                 for index in range(1, pool.count + 1)
             )

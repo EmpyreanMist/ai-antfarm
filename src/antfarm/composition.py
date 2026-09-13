@@ -35,6 +35,12 @@ class ComposedSimulation:
     storage: Storage
     event_bus: InMemoryEventBus
     metrics: BuiltInMetricCollector
+    providers: tuple[ModelProvider, ...]
+
+    async def close(self) -> None:
+        for provider in self.providers:
+            await provider.close()
+        self.storage.close()
 
 
 def compose(config: ScenarioConfig) -> ComposedSimulation:
@@ -142,7 +148,9 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
         RunMetadata(run_id=run_id, seed=config.run.seed),
         config.normalized_data(),
     )
-    event_bus = InMemoryEventBus()
+    event_bus = InMemoryEventBus(
+        max_retained_events=config.observability.event_buffer_limit
+    )
     environment: Environment
     if isinstance(config.environment, CommonsEnvironmentConfig):
         environment = CommonsEnvironment(
@@ -183,6 +191,18 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
             interval=config.scheduling.interval,
             cooldown=config.scheduling.cooldown,
             event_kinds=config.scheduling.event_kinds,
+            agent_intervals={
+                AgentId(agent.id): agent.cognition_interval
+                for agent in resolved_agents
+                if agent.cognition_interval is not None
+            },
+            stagger=config.scheduling.stagger,
+            max_cognitions_per_tick=(
+                config.scheduling.max_cognitions_per_tick
+            ),
+            failure_retry_cooldown_max=(
+                config.scheduling.failure_retry_cooldown_max
+            ),
         ),
         event_bus=event_bus,
         storage=storage,
@@ -198,4 +218,5 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
         storage=storage,
         event_bus=event_bus,
         metrics=engine.metrics,
+        providers=tuple(dict.fromkeys(models.values())),
     )

@@ -13,6 +13,8 @@ from antfarm.domain.models import (
 
 
 class Storage(Protocol):
+    def close(self) -> None: ...
+
     def create_run(
         self, metadata: RunMetadata, scenario: Mapping[str, object]
     ) -> None: ...

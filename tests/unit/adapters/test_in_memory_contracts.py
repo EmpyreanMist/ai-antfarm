@@ -100,3 +100,31 @@ def test_event_subscription_is_observational_and_cancellable() -> None:
 
     assert received == [event]
     assert bus.published == [event, event]
+
+
+def test_event_bus_bounds_history_and_isolates_observer_failures() -> None:
+    bus = InMemoryEventBus(max_retained_events=2)
+
+    def broken(event: Event) -> None:
+        del event
+        raise RuntimeError("observer failure")
+
+    bus.subscribe({"test.event"}, broken)
+    events = tuple(
+        Event(
+            schema_version=1,
+            event_id=f"run:{sequence}",
+            run_id=RunId("run"),
+            sequence=EventSequence(sequence),
+            tick=Tick(1),
+            kind="test.event",
+            actor_id=None,
+            causation_id=None,
+        )
+        for sequence in range(1, 4)
+    )
+
+    bus.publish(events)
+
+    assert bus.published == list(events[-2:])
+    assert bus.observer_errors == ["RuntimeError", "RuntimeError", "RuntimeError"]

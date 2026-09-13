@@ -62,3 +62,32 @@ def test_unexpected_runtime_failure_returns_nonzero(
     assert result == 1
     assert captured.out == ""
     assert captured.err.strip() == "runtime error: RuntimeError: unexpected failure"
+
+
+def test_continuous_run_is_explicit_and_reports_last_committed_tick(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async def continuous_run(
+        path: object, *, tick_seconds: float
+    ) -> RunSummary:
+        del path
+        assert tick_seconds == 0.5
+        return RunSummary(
+            run_id="continuous-test",
+            ticks=7,
+            final_state={"value": 4},
+            events=(),
+        )
+
+    monkeypatch.setattr(cli, "run_continuous_scenario", continuous_run)
+
+    result = cli.main(
+        ["run", "scenario.yaml", "--continuous", "--tick-seconds", "0.5"]
+    )
+    captured = capsys.readouterr()
+
+    assert result == 0
+    assert "continuous; tick interval >= 0.5s; Ctrl+C to stop" in captured.out
+    assert "stopped; last committed tick=7" in captured.out
+    assert "events=0" in captured.out

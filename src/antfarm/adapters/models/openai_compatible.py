@@ -2,10 +2,10 @@
 
 import asyncio
 import json
-from collections.abc import Callable, Mapping
-from typing import cast
+import ssl
+from collections.abc import Awaitable, Callable, Mapping
+from contextlib import suppress
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 from antfarm.domain.json_values import JsonObject, thaw_json
 from antfarm.ports.models import (
@@ -15,7 +15,12 @@ from antfarm.ports.models import (
     ProviderCapabilities,
 )
 
-type HttpTransport = Callable[[str, Mapping[str, str], bytes, float], bytes]
+type HttpTransport = Callable[
+    [str, Mapping[str, str], bytes, float], Awaitable[bytes]
+]
+
+_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+
 
 class OpenAICompatibleModelProvider:
     """Generate provider-neutral decisions through `/chat/completions`."""
@@ -47,7 +52,7 @@ class OpenAICompatibleModelProvider:
         self._timeout_seconds = timeout_seconds
         self._parameters = parameters or {}
         self._api_key = api_key
-        self._transport = transport or _urlopen_transport
+        self._transport = transport or _async_http_transport
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
         body = self._request_body(request)
@@ -56,16 +61,15 @@ class OpenAICompatibleModelProvider:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
         raw_response = await asyncio.wait_for(
-            asyncio.to_thread(
-                self._transport,
-                self._endpoint,
-                headers,
-                body,
-                self._timeout_seconds,
+            self._transport(
+                self._endpoint, headers, body, self._timeout_seconds
             ),
             timeout=self._timeout_seconds,
         )
         return _parse_response(raw_response)
+
+    async def close(self) -> None:
+        """The per-request transport owns no resources after a request finishes."""
 
     def _request_body(self, request: ModelRequest) -> bytes:
         personality = None
@@ -149,15 +153,99 @@ class OpenAICompatibleModelProvider:
         return json.dumps(payload, allow_nan=False, separators=(",", ":")).encode()
 
 
-def _urlopen_transport(
+async def _async_http_transport(
     url: str,
     headers: Mapping[str, str],
     body: bytes,
     timeout_seconds: float,
 ) -> bytes:
-    request = Request(url, data=body, headers=dict(headers), method="POST")
-    with urlopen(request, timeout=timeout_seconds) as response:  # noqa: S310
-        return cast(bytes, response.read())
+    parsed = urlparse(url)
+    host = parsed.hostname
+    if host is None:
+        raise ValueError("HTTP endpoint has no host")
+    secure = parsed.scheme == "https"
+    port = parsed.port or (443 if secure else 80)
+    target = parsed.path or "/"
+    if parsed.query:
+        target = f"{target}?{parsed.query}"
+    ssl_context = ssl.create_default_context() if secure else None
+    reader, writer = await asyncio.wait_for(
+        asyncio.open_connection(
+            host,
+            port,
+            ssl=ssl_context,
+            server_hostname=host if secure else None,
+        ),
+        timeout=timeout_seconds,
+    )
+    try:
+        request_headers = {
+            "Host": parsed.netloc,
+            "Content-Length": str(len(body)),
+            "Connection": "close",
+            **headers,
+        }
+        encoded_headers = "".join(
+            f"{name}: {value}\r\n" for name, value in request_headers.items()
+        ).encode("ascii")
+        writer.write(f"POST {target} HTTP/1.1\r\n".encode("ascii"))
+        writer.write(encoded_headers)
+        writer.write(b"\r\n")
+        writer.write(body)
+        await writer.drain()
+
+        status_line = await reader.readline()
+        parts = status_line.decode("iso-8859-1").split(maxsplit=2)
+        if len(parts) < 2 or not parts[1].isdigit():
+            raise ConnectionError("endpoint returned an invalid HTTP response")
+        response_headers: dict[str, str] = {}
+        while True:
+            line = await reader.readline()
+            if line in {b"\r\n", b"\n", b""}:
+                break
+            name, separator, value = line.decode("iso-8859-1").partition(":")
+            if not separator:
+                raise ConnectionError("endpoint returned invalid HTTP headers")
+            response_headers[name.lower()] = value.strip()
+
+        if response_headers.get("transfer-encoding", "").lower() == "chunked":
+            response_body = await _read_chunked(reader)
+        elif "content-length" in response_headers:
+            length = int(response_headers["content-length"])
+            if length > _MAX_RESPONSE_BYTES:
+                raise ValueError("endpoint response exceeded the size limit")
+            response_body = await reader.readexactly(length)
+        else:
+            response_body = await reader.read(_MAX_RESPONSE_BYTES + 1)
+            if len(response_body) > _MAX_RESPONSE_BYTES:
+                raise ValueError("endpoint response exceeded the size limit")
+        status = int(parts[1])
+        if status < 200 or status >= 300:
+            raise ConnectionError(f"endpoint returned HTTP status {status}")
+        return response_body
+    finally:
+        writer.close()
+        with suppress(ConnectionError, OSError):
+            await writer.wait_closed()
+
+
+async def _read_chunked(reader: asyncio.StreamReader) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        size_line = await reader.readline()
+        size_text = size_line.split(b";", 1)[0].strip()
+        size = int(size_text, 16)
+        if size == 0:
+            while await reader.readline() not in {b"\r\n", b"\n", b""}:
+                pass
+            return b"".join(chunks)
+        total += size
+        if total > _MAX_RESPONSE_BYTES:
+            raise ValueError("endpoint response exceeded the size limit")
+        chunks.append(await reader.readexactly(size))
+        if await reader.readexactly(2) != b"\r\n":
+            raise ConnectionError("endpoint returned an invalid chunked response")
 
 
 def _parse_response(raw_response: bytes) -> ModelResponse:

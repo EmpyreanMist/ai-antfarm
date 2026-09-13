@@ -1,0 +1,58 @@
+schema_version: 1
+run:
+  id: continuous-social-mock
+  seed: 79
+  ticks: 3
+providers:
+  scripted:
+    kind: mock
+    decisions:
+      alice:
+        - kind: say
+          parameters: {text: Let us protect the commons.}
+      bob:
+        - kind: say
+          parameters: {text: I will take only what I need.}
+      charlie:
+        - kind: harvest
+          parameters: {amount: 1}
+models:
+  shared-model:
+    provider_ref: scripted
+    model: fixed-continuous-decisions
+personalities:
+  cautious: {description: Protect the shared resource.}
+  pragmatic: {description: Balance personal and shared needs.}
+  generous: {description: Favor cooperation and listen to others.}
+agents:
+  - id: alice
+    model_ref: shared-model
+    personality_ref: cautious
+    cognition_interval: 3
+  - id: bob
+    model_ref: shared-model
+    personality_ref: pragmatic
+    cognition_interval: 3
+  - id: charlie
+    model_ref: shared-model
+    personality_ref: generous
+    cognition_interval: 3
+actions:
+  - {kind: harvest}
+  - {kind: contribute}
+  - {kind: say}
+environment:
+  kind: commons
+  initial_resource: 6
+  initial_endowment: 1
+  social: {message_max_length: 240, history_limit: 8, roster_limit: 10}
+memory: {kind: in_memory, recall_limit: 8, retention_limit: 16}
+scheduling:
+  kind: stable
+  interval: 3
+  stagger: true
+  max_cognitions_per_tick: 1
+  failure_retry_cooldown_max: 8
+metrics: [action_count, rejection_count, failure_count, agent_outcomes]
+observability: {event_buffer_limit: 100}
+storage: {kind: sqlite, path: continuous-social-mock.db}

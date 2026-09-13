@@ -1,6 +1,5 @@
 import asyncio
 import json
-import time
 from collections.abc import Mapping
 
 import pytest
@@ -48,7 +47,7 @@ def _request() -> ModelRequest:
 def test_structured_request_and_response_use_provider_neutral_values() -> None:
     captured: dict[str, object] = {}
 
-    def transport(
+    async def transport(
         url: str,
         headers: Mapping[str, str],
         body: bytes,
@@ -151,7 +150,7 @@ def test_structured_request_and_response_use_provider_neutral_values() -> None:
     ],
 )
 def test_malformed_structured_responses_fail_safely(raw_response: bytes) -> None:
-    def transport(
+    async def transport(
         url: str,
         headers: Mapping[str, str],
         body: bytes,
@@ -175,7 +174,7 @@ def test_malformed_structured_responses_fail_safely(raw_response: bytes) -> None
 def test_markdown_fenced_json_response_is_accepted(fence: str) -> None:
     decision = '{"action_kind":"increment","parameters":{"amount":2}}'
 
-    def transport(
+    async def transport(
         url: str,
         headers: Mapping[str, str],
         body: bytes,
@@ -204,7 +203,7 @@ def test_markdown_fenced_json_response_is_accepted(fence: str) -> None:
 def test_malformed_error_does_not_expose_response_content() -> None:
     sensitive_content = "private-model-output-that-is-not-json"
 
-    def transport(
+    async def transport(
         url: str,
         headers: Mapping[str, str],
         body: bytes,
@@ -229,14 +228,14 @@ def test_malformed_error_does_not_expose_response_content() -> None:
 
 
 def test_timeout_is_enforced_around_the_transport() -> None:
-    def slow_transport(
+    async def slow_transport(
         url: str,
         headers: Mapping[str, str],
         body: bytes,
         timeout_seconds: float,
     ) -> bytes:
         del url, headers, body, timeout_seconds
-        time.sleep(0.05)
+        await asyncio.sleep(0.05)
         return b"{}"
 
     provider = OpenAICompatibleModelProvider(
@@ -248,6 +247,83 @@ def test_timeout_is_enforced_around_the_transport() -> None:
 
     with pytest.raises(TimeoutError):
         asyncio.run(provider.generate(_request()))
+
+
+def test_cancelling_real_transport_closes_the_in_flight_connection() -> None:
+    async def exercise() -> None:
+        request_received = asyncio.Event()
+        connection_closed = asyncio.Event()
+
+        async def handle(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            try:
+                await reader.readuntil(b"\r\n\r\n")
+                request_received.set()
+                await reader.read()
+                connection_closed.set()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+
+        server = await asyncio.start_server(handle, "127.0.0.1", 0)
+        socket = server.sockets[0]
+        port = socket.getsockname()[1]
+        provider = OpenAICompatibleModelProvider(
+            base_url=f"http://127.0.0.1:{port}/v1",
+            model="test",
+            timeout_seconds=5,
+        )
+        task = asyncio.create_task(provider.generate(_request()))
+        await asyncio.wait_for(request_received.wait(), 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.wait_for(connection_closed.wait(), 1)
+        server.close()
+        await server.wait_closed()
+
+    asyncio.run(exercise())
+
+
+def test_real_async_transport_reads_a_content_length_response() -> None:
+    async def exercise() -> ModelResponse:
+        async def handle(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            await reader.readuntil(b"\r\n\r\n")
+            content = json.dumps(
+                {"action_kind": "increment", "parameters": {"amount": 2}}
+            )
+            body = json.dumps(
+                {"choices": [{"message": {"content": content}}]}
+            ).encode()
+            writer.write(
+                b"HTTP/1.1 200 OK\r\nContent-Length: "
+                + str(len(body)).encode()
+                + b"\r\nConnection: close\r\n\r\n"
+                + body
+            )
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(handle, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        provider = OpenAICompatibleModelProvider(
+            base_url=f"http://127.0.0.1:{port}/v1",
+            model="test",
+            timeout_seconds=1,
+        )
+        try:
+            return await provider.generate(_request())
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    assert asyncio.run(exercise()) == ModelResponse(
+        action_kind="increment", parameters={"amount": 2}
+    )
 
 
 @pytest.mark.parametrize("base_url", ["", "models.example/v1", "file:///tmp/v1"])

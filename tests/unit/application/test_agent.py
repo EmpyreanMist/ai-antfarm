@@ -41,6 +41,9 @@ class _MalformedProvider:
         del request
         raise MalformedModelResponseError("invalid wire response")
 
+    async def close(self) -> None:
+        pass
+
 
 def test_malformed_provider_output_becomes_a_malformed_decision() -> None:
     agent_id = AgentId("alice")
@@ -70,6 +73,9 @@ class _RecordingProvider:
     async def generate(self, request: ModelRequest) -> ModelResponse:
         self.requests.append(request)
         return ModelResponse(action_kind=None)
+
+    async def close(self) -> None:
+        pass
 
 
 def test_agent_supplies_immutable_identity_and_private_personality() -> None:

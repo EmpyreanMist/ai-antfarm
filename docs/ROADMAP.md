@@ -234,7 +234,7 @@ text generation.
 
 ## Current-State Review and Planning Boundary
 
-This plan reflects the repository through M2-02, including accepted ADRs 0010 and
+This plan reflects the repository through M2-03, including accepted ADRs 0010 and
 
 11. Completed milestone text above is retained. AGENTS.md's introductory
 
@@ -264,25 +264,21 @@ history starting on the next tick. SQLite tests prove that older messages remain
 
 in the durable event log after falling out of live context.
 
-The remaining gaps are concrete:
+M2-03 adds explicit paced continuous execution, deterministic staggered cadence,
 
-- Scheduling supports intervals, cooldowns, and actor-based event triggers, but
+a fair cognition budget, recipient wakeups, capped provider-failure retries, and
 
-  lacks staggered per-agent cadence, a fair invocation budget, and recipient wakeups.
+checkpointed scheduler state. Failed or cancelled commits restore the preceding
 
-- The runner is finite and returns an accumulated event list. The CLI prints only
+complete state, observer failures are isolated after commit, the live event window
 
-  after completion; the event bus also retains every published event.
+is bounded, and cancellable asyncio HTTP transport closes in-flight connections.
 
-- Durable steps are atomic, but the engine changes live world, memory, scheduler,
+The remaining interactive gap is M2-04's terminal rendering of committed actions
 
-  and sequence state before commit. Failed commits and cancellation need explicit
+and speech. Continuous M2-03 runs intentionally report lifecycle and final
 
-  recovery semantics before continuous operation. Observer exceptions propagate.
-
-- The HTTP adapter uses a worker thread; cancelling its await does not by itself
-
-  terminate the underlying request. Real-time shutdown must account for this.
+checkpoint status without presenting dialogue as it occurs.
 
 M1-03 comparison and M1-04 replay move later, retaining their identifiers and scope
 
@@ -324,11 +320,13 @@ unless explicitly requested otherwise.
 
   implemented without exposing private context.
 
-- **M2-03 — Next:** add paced continuous execution, fair bounded cognition,
+- **M2-03 — Complete:** paced continuous execution, fair bounded cognition,
 
-  recovery on failed commits, and safe stopping.
+  recipient wakeups, failed-commit recovery, bounded event retention, and safe
 
-- **M2-04 — Planned:** stream committed society events in the terminal and verify
+  cancellable stopping are implemented.
+
+- **M2-04 — Next:** stream committed society events in the terminal and verify
 
   the complete local-AI experience.
 
@@ -499,7 +497,7 @@ as model quality variation because the structured-output and validated social
 action pipeline behaved correctly. M2-02 is therefore manually verified; no
 M2-03 work was included in the compatibility fix.
 
-### M2-03: Paced Autonomous Execution and Safe Stop — Next
+### M2-03: Paced Autonomous Execution and Safe Stop — Complete
 
 **Purpose:** run a shared backend indefinitely at a sensible cadence while
 

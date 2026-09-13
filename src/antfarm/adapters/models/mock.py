@@ -32,3 +32,6 @@ class MockModelProvider:
         if isinstance(decision, Exception):
             raise decision
         return decision
+
+    async def close(self) -> None:
+        """The deterministic provider owns no external resources."""

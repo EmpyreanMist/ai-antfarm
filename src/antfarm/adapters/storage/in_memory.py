@@ -18,6 +18,9 @@ class InMemoryStorage:
         self.snapshots: dict[RunId, SimulationSnapshot] = {}
         self.events: dict[RunId, list[Event]] = {}
 
+    def close(self) -> None:
+        """The process-local adapter owns no external resources."""
+
     def create_run(self, metadata: RunMetadata, scenario: Mapping[str, object]) -> None:
         self.metadata[metadata.run_id] = metadata
         self.scenarios[metadata.run_id] = dict(scenario)

@@ -225,6 +225,41 @@ def test_event_only_scheduling_is_valid() -> None:
     assert config.scheduling.event_kinds == ("action.applied",)
 
 
+def test_agent_and_pool_cadence_and_budgets_are_normalized() -> None:
+    data = _valid_data()
+    data["agents"] = [
+        {
+            "id": "alice",
+            "model_ref": "deterministic",
+            "cognition_interval": 4,
+        }
+    ]
+    data["agent_pools"] = [
+        {
+            "id_prefix": "worker",
+            "count": 2,
+            "model_ref": "deterministic",
+            "cognition_interval": 3,
+        }
+    ]
+    data["providers"] = {"scripted": {"kind": "mock", "decisions": {}}}
+    data["scheduling"] = {
+        "kind": "stable",
+        "interval": 5,
+        "stagger": True,
+        "max_cognitions_per_tick": 1,
+        "failure_retry_cooldown_max": 4,
+    }
+    data["observability"] = {"event_buffer_limit": 12}
+
+    config = ScenarioConfig.model_validate(data)
+
+    assert [agent.cognition_interval for agent in config.expand_agents()] == [4, 3, 3]
+    assert config.scheduling.max_cognitions_per_tick == 1
+    assert config.scheduling.stagger is True
+    assert config.observability.event_buffer_limit == 12
+
+
 def test_scheduling_requires_a_due_strategy() -> None:
     data = _valid_data()
     data["scheduling"] = {"kind": "stable", "interval": None}
