@@ -1,14 +1,17 @@
-"""The deterministic, sequential M0.1 simulation engine."""
+"""Deterministic, sequential simulation orchestration."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from random import Random
 
+from antfarm.application.agent import MalformedDecisionError
 from antfarm.application.scheduler import CognitionScheduler, ScheduleContext
 from antfarm.domain.json_values import JsonObject
 from antfarm.domain.models import (
+    ActionProposal,
     AgentContext,
     AgentId,
+    CognitionOutcome,
     Event,
     EventSequence,
     MemoryItem,
@@ -58,6 +61,7 @@ class SimulationEngine:
     async def step(self) -> StepResult:
         tick = Tick(int(self._tick) + 1)
         events: list[Event] = [self._event(tick, "tick.started")]
+        outcomes: list[CognitionOutcome] = []
         selected = self._scheduler.select(
             ScheduleContext(tick=tick, agent_ids=tuple(self._agents))
         )
@@ -78,6 +82,34 @@ class SimulationEngine:
             )
             try:
                 proposal = await agent.decide(context)
+            except TimeoutError:
+                events.append(
+                    self._event(
+                        tick,
+                        "cognition.timed_out",
+                        actor_id=agent_id,
+                        causation_id=observation_event.event_id,
+                        payload={"reason": "timeout"},
+                    )
+                )
+                outcomes.append(
+                    CognitionOutcome(agent_id=agent_id, tick=tick, kind="timed_out")
+                )
+                continue
+            except MalformedDecisionError:
+                events.append(
+                    self._event(
+                        tick,
+                        "cognition.malformed",
+                        actor_id=agent_id,
+                        causation_id=observation_event.event_id,
+                        payload={"reason": "invalid decision"},
+                    )
+                )
+                outcomes.append(
+                    CognitionOutcome(agent_id=agent_id, tick=tick, kind="malformed")
+                )
+                continue
             except Exception as error:  # Provider failures become inert events.
                 events.append(
                     self._event(
@@ -87,6 +119,9 @@ class SimulationEngine:
                         causation_id=observation_event.event_id,
                         payload={"reason": type(error).__name__},
                     )
+                )
+                outcomes.append(
+                    CognitionOutcome(agent_id=agent_id, tick=tick, kind="failed")
                 )
                 continue
 
@@ -99,6 +134,27 @@ class SimulationEngine:
                         causation_id=observation_event.event_id,
                     )
                 )
+                outcomes.append(
+                    CognitionOutcome(agent_id=agent_id, tick=tick, kind="noop")
+                )
+                continue
+
+            if (
+                not isinstance(proposal, ActionProposal)
+                or proposal.actor_id != agent_id
+            ):
+                events.append(
+                    self._event(
+                        tick,
+                        "cognition.malformed",
+                        actor_id=agent_id,
+                        causation_id=observation_event.event_id,
+                        payload={"reason": "invalid action proposal"},
+                    )
+                )
+                outcomes.append(
+                    CognitionOutcome(agent_id=agent_id, tick=tick, kind="malformed")
+                )
                 continue
 
             proposal_event = self._event(
@@ -106,7 +162,7 @@ class SimulationEngine:
                 "proposal.created",
                 actor_id=agent_id,
                 causation_id=observation_event.event_id,
-                payload={"kind": proposal.kind},
+                payload={"kind": proposal.kind, "parameters": proposal.parameters},
             )
             events.append(proposal_event)
             validation = self._environment.validate(proposal)
@@ -120,6 +176,9 @@ class SimulationEngine:
                         payload={"reason": validation.reason or "rejected"},
                     )
                 )
+                outcomes.append(
+                    CognitionOutcome(agent_id=agent_id, tick=tick, kind="rejected")
+                )
                 continue
 
             action = validation.action
@@ -130,7 +189,7 @@ class SimulationEngine:
                 "action.validated",
                 actor_id=agent_id,
                 causation_id=proposal_event.event_id,
-                payload={"kind": action.kind},
+                payload={"kind": action.kind, "parameters": action.parameters},
             )
             events.append(validated_event)
             result = self._environment.apply(action, self._rng)
@@ -146,7 +205,11 @@ class SimulationEngine:
                 agent_id,
                 (MemoryItem(kind="action_result", content=result.payload),),
             )
+            outcomes.append(
+                CognitionOutcome(agent_id=agent_id, tick=tick, kind="applied")
+            )
 
+        self._scheduler.record(tuple(outcomes))
         events.append(self._event(tick, "tick.completed"))
         self._tick = tick
         snapshot = SimulationSnapshot(

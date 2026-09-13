@@ -6,6 +6,10 @@ from antfarm.domain.models import ActionProposal, AgentContext, AgentId
 from antfarm.ports.models import ModelProvider, ModelRequest
 
 
+class MalformedDecisionError(ValueError):
+    """A provider response could not be converted to a domain proposal."""
+
+
 @dataclass(slots=True)
 class ModelBackedAgent:
     id: AgentId
@@ -22,8 +26,11 @@ class ModelBackedAgent:
         )
         if response.action_kind is None:
             return None
-        return ActionProposal(
-            actor_id=self.id,
-            kind=response.action_kind,
-            parameters=response.parameters,
-        )
+        try:
+            return ActionProposal(
+                actor_id=self.id,
+                kind=response.action_kind,
+                parameters=response.parameters,
+            )
+        except (TypeError, ValueError) as error:
+            raise MalformedDecisionError from error
