@@ -1,5 +1,7 @@
 # AntFarm AI
 
+[![CI](https://github.com/EmpyreanMist/ai-antfarm/actions/workflows/ci.yml/badge.svg)](https://github.com/EmpyreanMist/ai-antfarm/actions/workflows/ci.yml)
+
 AntFarm AI is a local-first Python framework for reproducible artificial-society simulations. The domain owns agents, environments, actions, state, time, and events; external model providers and persistence systems integrate through ports and adapters.
 
 ## Current Status
@@ -13,7 +15,7 @@ The foundation currently includes:
 - A deterministic mock model, counter environment, and sequential engine
 - An offline example scenario with unit and end-to-end tests
 
-SQLite recovery, richer scheduling and memory behavior, a real OpenAI-compatible provider, and the complete CLI inspection surface remain planned M0 work. See [the roadmap](docs/ROADMAP.md) for current progress.
+The repository bootstrap, strict scenario schema, and core contracts are complete. SQLite recovery, richer scheduling and memory behavior, a real OpenAI-compatible provider, and the complete CLI inspection surface remain planned M0 work. See [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Quick Start
 

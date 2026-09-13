@@ -6,7 +6,7 @@ M0 proves a deterministic, local-first vertical slice. Each item below is issue-
 
 ## Progress
 
-- **M0-01 — In progress:** package bootstrap, lockfile, local quality tooling, and CLI entry point are complete; GitHub Actions CI remains outstanding.
+- **M0-01 — Complete:** package bootstrap, lockfile, local quality tooling, CLI entry point, and GitHub Actions CI are implemented.
 - **M0-02 — Complete:** the strict versioned scenario schema, deterministic pool expansion, reference validation, and normalized JSON are implemented.
 - **M0-03 — Complete:** immutable domain values, approved protocols, inward-import checks, and serialization round trips are implemented.
 - **M0-04 — Next:** complete the deterministic engine failure and action lifecycle.
