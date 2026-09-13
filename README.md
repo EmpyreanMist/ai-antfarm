@@ -161,6 +161,14 @@ validation. Exact dialogue and physical actions vary with the model. This M2-02
 scenario is finite and prints its summary after completion; continuous execution
 and live per-event rendering are later roadmap milestones.
 
+The checked-in Qwen configuration uses the OpenAI-compatible
+`reasoning_effort: none` field, temperature `0`, a fixed seed, and a bounded
+completion budget. Do not replace `reasoning_effort` with Ollama's native
+`think` field on the `/v1/chat/completions` endpoint. The generic adapter sends
+the exact JSON Schema in both `response_format` and the system instruction, and
+accepts either bare structured JSON or a single Markdown JSON fence for compatible
+endpoints that wrap an otherwise valid response.
+
 To route only Charlie to a second local model, first pull that model, then copy the
 `qwen-local` entry under `models` to a new key, change its `model` tag, and set
 Charlie's `model_ref` to the new key. This creates one provider adapter per used

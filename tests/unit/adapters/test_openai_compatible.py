@@ -107,6 +107,9 @@ def test_structured_request_and_response_use_provider_neutral_values() -> None:
     assert body["response_format"]["json_schema"]["schema"]["properties"][
         "action_kind"
     ]["enum"] == ["increment", None]
+    system_prompt = body["messages"][0]["content"]
+    assert '"additionalProperties":false' in system_prompt
+    assert '"action_kind"' in system_prompt
     context = json.loads(body["messages"][1]["content"])
     assert context == {
         "available_actions": [
@@ -166,6 +169,63 @@ def test_malformed_structured_responses_fail_safely(raw_response: bytes) -> None
 
     with pytest.raises(MalformedModelResponseError, match="malformed"):
         asyncio.run(provider.generate(_request()))
+
+
+@pytest.mark.parametrize("fence", ["```json", "```"])
+def test_markdown_fenced_json_response_is_accepted(fence: str) -> None:
+    decision = '{"action_kind":"increment","parameters":{"amount":2}}'
+
+    def transport(
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> bytes:
+        del url, headers, body, timeout_seconds
+        content = f"{fence}\n{decision}\n```"
+        return json.dumps(
+            {"choices": [{"message": {"content": content}}]}
+        ).encode()
+
+    provider = OpenAICompatibleModelProvider(
+        base_url="https://models.example/v1",
+        model="test",
+        timeout_seconds=1,
+        transport=transport,
+    )
+
+    response = asyncio.run(provider.generate(_request()))
+
+    assert response == ModelResponse(
+        action_kind="increment", parameters={"amount": 2}
+    )
+
+
+def test_malformed_error_does_not_expose_response_content() -> None:
+    sensitive_content = "private-model-output-that-is-not-json"
+
+    def transport(
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> bytes:
+        del url, headers, body, timeout_seconds
+        return json.dumps(
+            {"choices": [{"message": {"content": sensitive_content}}]}
+        ).encode()
+
+    provider = OpenAICompatibleModelProvider(
+        base_url="https://models.example/v1",
+        model="test",
+        timeout_seconds=1,
+        transport=transport,
+    )
+
+    with pytest.raises(MalformedModelResponseError) as raised:
+        asyncio.run(provider.generate(_request()))
+
+    assert sensitive_content not in str(raised.value)
 
 
 def test_timeout_is_enforced_around_the_transport() -> None:

@@ -53,6 +53,12 @@ def test_social_ollama_example_validates_without_network() -> None:
     assert config.environment.kind == "commons"
     assert config.environment.social is not None
     assert config.environment.social.history_limit == 8
+    assert dict(config.models["qwen-local"].parameters) == {
+        "temperature": 0,
+        "seed": 73,
+        "reasoning_effort": "none",
+        "max_tokens": 256,
+    }
     assert {action.kind for action in config.actions} == {
         "harvest",
         "contribute",

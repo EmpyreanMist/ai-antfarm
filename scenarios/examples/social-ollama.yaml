@@ -13,8 +13,10 @@ models:
     model: qwen3.5:0.8b
     timeout_seconds: 180
     parameters:
-      temperature: 0.3
-      think: false
+      temperature: 0
+      seed: 73
+      reasoning_effort: none
+      max_tokens: 256
 personalities:
   cautious:
     description: Protect the shared resource and clearly explain concerns.
