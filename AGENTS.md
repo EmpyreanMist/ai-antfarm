@@ -34,3 +34,17 @@ Use Conventional Commits, for example `feat(engine): add deterministic step orde
 ## Architecture & Security
 
 The engine alone mutates world state. LLMs propose actions; environments validate them before application. Keep OASIS, CAMEL, Ollama, and other vendors behind adapters. Never place secrets in scenarios, fixtures, logs, events, or commits; configuration should reference environment-variable names instead.
+
+## Milestone workflow
+
+At the beginning of a new session, inspect repository state, documentation,
+roadmap, ADRs, git history, and uncommitted changes before implementing work.
+
+Treat the repository as the source of truth rather than previous chat context.
+
+When a milestone is complete, verify it before moving forward.
+
+At the end of implementation, provide exact manual verification instructions
+for Windows/VS Code, including commands and expected results.
+
+Do not begin a later milestone until the current milestone has passed verification.
