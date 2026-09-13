@@ -9,20 +9,34 @@ def _config(*, action_kind: str = "increment", amount: int = 1) -> ScenarioConfi
         {
             "schema_version": 1,
             "run": {"id": "test-run", "seed": 23, "ticks": 1},
-            "provider": {
-                "kind": "mock",
-                "decisions": {
-                    "alice": [{"kind": action_kind, "parameters": {"amount": amount}}]
-                },
+            "providers": {
+                "scripted": {
+                    "kind": "mock",
+                    "decisions": {
+                        "alice": [
+                            {"kind": action_kind, "parameters": {"amount": amount}}
+                        ]
+                    },
+                }
             },
-            "agents": [{"id": "alice"}],
+            "models": {
+                "deterministic": {
+                    "provider_ref": "scripted",
+                    "model": "fixed-decisions",
+                }
+            },
+            "agents": [{"id": "alice", "model_ref": "deterministic"}],
+            "actions": [{"kind": "increment"}],
             "environment": {"kind": "counter", "initial_value": 4},
+            "memory": {"kind": "in_memory"},
+            "scheduling": {"kind": "stable"},
+            "storage": {"kind": "memory"},
         }
     )
 
 
 def test_invalid_proposal_cannot_mutate_world_state() -> None:
-    simulation = compose(_config(action_kind="erase"))
+    simulation = compose(_config(amount=0))
 
     result = asyncio.run(simulation.engine.step())
 

@@ -3,21 +3,43 @@ run:
   id: minimal
   seed: 17
   ticks: 1
-provider:
-  kind: mock
-  decisions:
-    alice:
-      - kind: increment
-        parameters:
-          amount: 1
-    bob:
-      - kind: increment
-        parameters:
-          amount: 2
+providers:
+  scripted:
+    kind: mock
+    decisions:
+      alice-001:
+        - kind: increment
+          parameters:
+            amount: 1
+      bob:
+        - kind: increment
+          parameters:
+            amount: 2
+models:
+  deterministic:
+    provider_ref: scripted
+    model: fixed-decisions
+personalities:
+  patient:
+    description: A deliberately minimal example personality.
+    traits:
+      patience: high
 agents:
   - id: bob
-  - id: alice
+    model_ref: deterministic
+    personality_ref: patient
+agent_pools:
+  - id_prefix: alice
+    count: 1
+    model_ref: deterministic
+actions:
+  - kind: increment
 environment:
   kind: counter
   initial_value: 0
-
+memory:
+  kind: in_memory
+scheduling:
+  kind: stable
+storage:
+  kind: memory
