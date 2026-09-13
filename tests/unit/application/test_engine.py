@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from random import Random
 from typing import cast
 
+import pytest
+
 from antfarm.adapters.events import InMemoryEventBus
 from antfarm.adapters.memory import InMemoryMemoryStore
 from antfarm.adapters.storage import InMemoryStorage
@@ -125,6 +127,58 @@ def test_repeated_mock_runs_are_identical() -> None:
     second = asyncio.run(compose(_config(amount=2)).engine.run(RunLimit(ticks=2)))
 
     assert first == second
+
+
+def test_openai_compatible_model_resolves_api_key_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = _config().model_dump(mode="json")
+    data["providers"] = {
+        "remote": {
+            "kind": "openai_compatible",
+            "base_url": "https://models.example/v1",
+            "api_key_env": "ANTFARM_TEST_API_KEY",
+        }
+    }
+    data["models"] = {
+        "remote-model": {
+            "provider_ref": "remote",
+            "model": "example/model",
+            "timeout_seconds": 4,
+            "parameters": {"temperature": 0},
+        }
+    }
+    data["agents"] = [{"id": "alice", "model_ref": "remote-model"}]
+    config = ScenarioConfig.model_validate(data)
+    monkeypatch.delenv("ANTFARM_TEST_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="ANTFARM_TEST_API_KEY"):
+        compose(config)
+
+    monkeypatch.setenv("ANTFARM_TEST_API_KEY", "test-secret")
+    assert isinstance(compose(config).engine, SimulationEngine)
+
+
+def test_unused_remote_model_does_not_require_credentials() -> None:
+    data = _config().model_dump(mode="json")
+    providers = data["providers"]
+    models = data["models"]
+    assert isinstance(providers, dict)
+    assert isinstance(models, dict)
+    providers["unused-remote"] = {
+        "kind": "openai_compatible",
+        "base_url": "https://models.example/v1",
+        "api_key_env": "ANTFARM_UNUSED_API_KEY",
+    }
+    models["unused-model"] = {
+        "provider_ref": "unused-remote",
+        "model": "unused",
+    }
+
+    assert isinstance(
+        compose(ScenarioConfig.model_validate(data)).engine,
+        SimulationEngine,
+    )
 
 
 @dataclass(slots=True)

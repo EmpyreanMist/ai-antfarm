@@ -3,7 +3,11 @@
 from dataclasses import dataclass
 
 from antfarm.domain.models import ActionProposal, AgentContext, AgentId
-from antfarm.ports.models import ModelProvider, ModelRequest
+from antfarm.ports.models import (
+    MalformedModelResponseError,
+    ModelProvider,
+    ModelRequest,
+)
 
 
 class MalformedDecisionError(ValueError):
@@ -17,13 +21,16 @@ class ModelBackedAgent:
     provider: ModelProvider
 
     async def decide(self, context: AgentContext) -> ActionProposal | None:
-        response = await self.provider.generate(
-            ModelRequest(
-                actor_id=self.id,
-                observation=context.observation,
-                memories=context.memories,
+        try:
+            response = await self.provider.generate(
+                ModelRequest(
+                    actor_id=self.id,
+                    observation=context.observation,
+                    memories=context.memories,
+                )
             )
-        )
+        except MalformedModelResponseError as error:
+            raise MalformedDecisionError from error
         if response.action_kind is None:
             return None
         try:

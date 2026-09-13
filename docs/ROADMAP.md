@@ -16,8 +16,11 @@ M0 proves a deterministic, local-first vertical slice. Each item below is issue-
   bounded agent-scoped recall, and memory/scheduler snapshot state are implemented.
 - **M0-06 — Complete:** versioned ordered events, atomic SQLite event/checkpoint
   commits, rollback coverage, and deterministic checkpoint recovery are implemented.
-- **M0-07 — Next:** add the generic OpenAI-compatible model provider adapter.
-- **M0-08 — Planned.**
+- **M0-07 — Complete:** the deterministic mock provider and generic
+  OpenAI-compatible chat-completions adapter support structured responses,
+  model configuration, API-key environment variables, safe malformed-response
+  handling, and enforced timeouts.
+- **M0-08 — Next:** complete the CLI and minimal end-to-end scenario surface.
 
 ### M0-01: Repository and Python Bootstrap
 

@@ -17,12 +17,13 @@ The foundation currently includes:
 - Interval, cooldown, and event-triggered scheduling with restorable state
 - Bounded, agent-scoped in-memory recall with snapshot/restore
 - Atomic SQLite event batches and deterministic checkpoint recovery
+- A generic OpenAI-compatible provider with structured responses and timeouts
 - An offline example scenario with unit and end-to-end tests
 
 The repository bootstrap, strict scenario schema, core contracts, deterministic
-engine lifecycle, baseline scheduling and memory, and SQLite recovery are complete.
-A real OpenAI-compatible provider and the complete CLI inspection surface remain
-planned M0 work. See [the roadmap](docs/ROADMAP.md) for current progress.
+engine lifecycle, baseline scheduling and memory, SQLite recovery, and model
+provider adapters are complete. The complete CLI inspection surface is the final
+planned M0 milestone. See [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Quick Start
 

@@ -31,6 +31,10 @@ class ModelResponse:
         object.__setattr__(self, "parameters", freeze_object(self.parameters))
 
 
+class MalformedModelResponseError(ValueError):
+    """A provider returned data that does not satisfy the model boundary."""
+
+
 class ModelProvider(Protocol):
     capabilities: ProviderCapabilities
 

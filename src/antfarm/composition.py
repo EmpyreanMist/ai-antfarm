@@ -1,16 +1,21 @@
 """Closed composition root for the runtime components implemented so far."""
 
+import os
 from dataclasses import dataclass
 
 from antfarm.adapters.events import InMemoryEventBus
 from antfarm.adapters.memory import InMemoryMemoryStore
-from antfarm.adapters.models import MockModelProvider
+from antfarm.adapters.models import (
+    MockModelProvider,
+    OpenAICompatibleModelProvider,
+)
 from antfarm.adapters.storage import InMemoryStorage, SQLiteStorage
 from antfarm.application.agent import ModelBackedAgent
 from antfarm.application.engine import SimulationEngine
 from antfarm.application.scheduler import StableScheduler
 from antfarm.config.schema import (
     MockProviderConfig,
+    OpenAICompatibleProviderConfig,
     ScenarioConfig,
     SqliteStorageConfig,
 )
@@ -52,10 +57,34 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
         providers[provider_id] = MockModelProvider(decisions)
 
     resolved_agents = config.expand_agents()
+    used_model_ids = sorted({agent.model_ref for agent in resolved_agents})
+    models: dict[str, ModelProvider] = {}
+    for model_id in used_model_ids:
+        model_config = config.models[model_id]
+        provider_config = config.providers[model_config.provider_ref]
+        if isinstance(provider_config, MockProviderConfig):
+            models[model_id] = providers[model_config.provider_ref]
+            continue
+        if isinstance(provider_config, OpenAICompatibleProviderConfig):
+            api_key = None
+            if provider_config.api_key_env is not None:
+                api_key = os.environ.get(provider_config.api_key_env)
+                if not api_key:
+                    raise ValueError(
+                        "required provider API key environment variable "
+                        f"{provider_config.api_key_env!r} is not set"
+                    )
+            models[model_id] = OpenAICompatibleModelProvider(
+                base_url=provider_config.base_url,
+                model=model_config.model,
+                timeout_seconds=model_config.timeout_seconds,
+                parameters=model_config.parameters,
+                api_key=api_key,
+            )
+
     agents: dict[AgentId, ModelBackedAgent] = {}
     for agent_config in resolved_agents:
-        model = config.models[agent_config.model_ref]
-        provider = providers.get(model.provider_ref)
+        provider = models.get(agent_config.model_ref)
         if provider is None:
             raise ValueError(
                 f"provider kind for model {agent_config.model_ref!r} is not implemented"
