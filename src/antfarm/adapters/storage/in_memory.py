@@ -1,4 +1,4 @@
-"""M0.1 storage adapter; durable SQLite is deliberately deferred."""
+"""Process-local implementation of the storage boundary."""
 
 from collections.abc import Iterable, Mapping, Sequence
 

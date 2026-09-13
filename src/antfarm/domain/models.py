@@ -132,11 +132,13 @@ class SimulationSnapshot:
     world: JsonObject
     memory: JsonObject = field(default_factory=lambda: MappingProxyType({}))
     scheduler: JsonObject = field(default_factory=lambda: MappingProxyType({}))
+    engine: JsonObject = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "world", freeze_object(self.world))
         object.__setattr__(self, "memory", freeze_object(self.memory))
         object.__setattr__(self, "scheduler", freeze_object(self.scheduler))
+        object.__setattr__(self, "engine", freeze_object(self.engine))
 
 
 @dataclass(frozen=True, slots=True)

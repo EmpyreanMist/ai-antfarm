@@ -106,7 +106,7 @@ Provider secrets are never embedded in scenarios. Configuration refers to enviro
 
 ## Persistence, Events, and Replay
 
-SQLite is the first `Storage` adapter. One short transaction per step stores the ordered event batch and latest checkpoint. Checkpoints, not an event fold, are the M0 recovery source of truth. Memory and scheduler state needed to continue a run are included in the checkpoint contract.
+SQLite is the first `Storage` adapter. One short transaction per step stores the ordered event batch and latest checkpoint. Checkpoints, not an event fold, are the M0 recovery source of truth. Memory, scheduler, event-sequence, and pseudorandom-generator state needed to continue a run are included in the checkpoint contract.
 
 Events support audit and metrics now and prepare for replay later. A future replay reads recorded accepted actions and outcomes; it must not call a model again. Raw prompts and responses are not persisted by default because they may contain secrets or personal data. Full event sourcing, branching histories, retention automation, and Postgres are deferred.
 

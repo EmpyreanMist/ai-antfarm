@@ -16,11 +16,12 @@ The foundation currently includes:
 - Ordered failure, timeout, rejection, no-op, and applied-action events
 - Interval, cooldown, and event-triggered scheduling with restorable state
 - Bounded, agent-scoped in-memory recall with snapshot/restore
+- Atomic SQLite event batches and deterministic checkpoint recovery
 - An offline example scenario with unit and end-to-end tests
 
 The repository bootstrap, strict scenario schema, core contracts, deterministic
-engine lifecycle, and baseline scheduling and memory are complete. SQLite recovery,
-a real OpenAI-compatible provider, and the complete CLI inspection surface remain
+engine lifecycle, baseline scheduling and memory, and SQLite recovery are complete.
+A real OpenAI-compatible provider and the complete CLI inspection surface remain
 planned M0 work. See [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Quick Start

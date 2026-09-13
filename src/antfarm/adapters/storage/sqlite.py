@@ -1,0 +1,176 @@
+"""Single-writer SQLite storage with atomic event/checkpoint commits."""
+
+import json
+import sqlite3
+from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
+from typing import cast
+
+from antfarm.domain.json_values import freeze_object, thaw_json
+from antfarm.domain.models import (
+    Event,
+    RunId,
+    RunMetadata,
+    SimulationSnapshot,
+    StoredCheckpoint,
+)
+from antfarm.domain.serialization import (
+    event_from_data,
+    event_to_data,
+    snapshot_from_data,
+    snapshot_to_data,
+)
+
+
+class SQLiteStorage:
+    """Persist one run writer while allowing data to survive process restarts."""
+
+    def __init__(self, path: str | Path) -> None:
+        self._connection = sqlite3.connect(Path(path))
+        self._connection.execute("PRAGMA foreign_keys = ON")
+        self._connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS runs (
+                run_id TEXT PRIMARY KEY,
+                seed INTEGER NOT NULL,
+                scenario_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS events (
+                run_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL CHECK (sequence > 0),
+                event_id TEXT NOT NULL,
+                event_json TEXT NOT NULL,
+                PRIMARY KEY (run_id, sequence),
+                UNIQUE (run_id, event_id),
+                FOREIGN KEY (run_id) REFERENCES runs(run_id)
+            );
+            CREATE TABLE IF NOT EXISTS checkpoints (
+                run_id TEXT PRIMARY KEY,
+                event_sequence INTEGER NOT NULL CHECK (event_sequence >= 0),
+                snapshot_json TEXT NOT NULL,
+                FOREIGN KEY (run_id) REFERENCES runs(run_id)
+            );
+            """
+        )
+
+    def close(self) -> None:
+        self._connection.close()
+
+    def __enter__(self) -> "SQLiteStorage":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+    def create_run(self, metadata: RunMetadata, scenario: Mapping[str, object]) -> None:
+        scenario_data = thaw_json(freeze_object(scenario))
+        try:
+            with self._connection:
+                self._connection.execute(
+                    "INSERT INTO runs (run_id, seed, scenario_json) VALUES (?, ?, ?)",
+                    (
+                        str(metadata.run_id),
+                        metadata.seed,
+                        _encode_json(scenario_data),
+                    ),
+                )
+        except sqlite3.IntegrityError as error:
+            raise ValueError(f"run already exists: {metadata.run_id}") from error
+
+    def commit_step(
+        self,
+        run_id: RunId,
+        snapshot: SimulationSnapshot,
+        events: Sequence[Event],
+    ) -> None:
+        if not events:
+            raise ValueError("a step must contain at least one event")
+        if any(event.run_id != run_id for event in events):
+            raise ValueError("all events must belong to the committed run")
+
+        sequences = [int(event.sequence) for event in events]
+        with self._connection:
+            run_exists = self._connection.execute(
+                "SELECT 1 FROM runs WHERE run_id = ?", (str(run_id),)
+            ).fetchone()
+            if run_exists is None:
+                raise ValueError(f"unknown run: {run_id}")
+            row = self._connection.execute(
+                "SELECT COALESCE(MAX(sequence), 0) FROM events WHERE run_id = ?",
+                (str(run_id),),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("event sequence query returned no result")
+            previous_sequence = cast(int, row[0])
+            expected = list(
+                range(previous_sequence + 1, previous_sequence + len(events) + 1)
+            )
+            if sequences != expected:
+                raise ValueError("event sequences must be contiguous and monotonic")
+            engine_sequence = snapshot.engine.get("event_sequence")
+            if engine_sequence != sequences[-1]:
+                raise ValueError("checkpoint sequence must match the event batch")
+
+            self._connection.executemany(
+                """
+                INSERT INTO events (run_id, sequence, event_id, event_json)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    (
+                        str(run_id),
+                        int(event.sequence),
+                        event.event_id,
+                        _encode_json(event_to_data(event)),
+                    )
+                    for event in events
+                ),
+            )
+            self._connection.execute(
+                """
+                INSERT INTO checkpoints (run_id, event_sequence, snapshot_json)
+                VALUES (?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    event_sequence = excluded.event_sequence,
+                    snapshot_json = excluded.snapshot_json
+                """,
+                (
+                    str(run_id),
+                    sequences[-1],
+                    _encode_json(snapshot_to_data(snapshot)),
+                ),
+            )
+
+    def load_latest(self, run_id: RunId) -> StoredCheckpoint | None:
+        row = self._connection.execute(
+            "SELECT snapshot_json FROM checkpoints WHERE run_id = ?",
+            (str(run_id),),
+        ).fetchone()
+        if row is None:
+            return None
+        data = _decode_object(cast(str, row[0]))
+        return StoredCheckpoint(run_id=run_id, snapshot=snapshot_from_data(data))
+
+    def read_events(self, run_id: RunId, after: int = 0) -> Iterable[Event]:
+        rows = self._connection.execute(
+            """
+            SELECT event_json FROM events
+            WHERE run_id = ? AND sequence > ?
+            ORDER BY sequence
+            """,
+            (str(run_id), after),
+        ).fetchall()
+        return tuple(
+            event_from_data(_decode_object(cast(str, row[0]))) for row in rows
+        )
+
+
+def _encode_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _decode_object(value: str) -> Mapping[str, object]:
+    decoded = json.loads(value)
+    if not isinstance(decoded, dict):
+        raise TypeError("stored JSON value must be an object")
+    return cast(dict[str, object], decoded)

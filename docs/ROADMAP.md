@@ -14,8 +14,10 @@ M0 proves a deterministic, local-first vertical slice. Each item below is issue-
   implemented.
 - **M0-05 — Complete:** interval, cooldown, event-triggered, and idle scheduling,
   bounded agent-scoped recall, and memory/scheduler snapshot state are implemented.
-- **M0-06 — Next:** add atomic SQLite event batches and checkpoint recovery.
-- **M0-07 through M0-08 — Planned.**
+- **M0-06 — Complete:** versioned ordered events, atomic SQLite event/checkpoint
+  commits, rollback coverage, and deterministic checkpoint recovery are implemented.
+- **M0-07 — Next:** add the generic OpenAI-compatible model provider adapter.
+- **M0-08 — Planned.**
 
 ### M0-01: Repository and Python Bootstrap
 

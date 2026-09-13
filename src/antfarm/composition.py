@@ -5,28 +5,30 @@ from dataclasses import dataclass
 from antfarm.adapters.events import InMemoryEventBus
 from antfarm.adapters.memory import InMemoryMemoryStore
 from antfarm.adapters.models import MockModelProvider
-from antfarm.adapters.storage import InMemoryStorage
+from antfarm.adapters.storage import InMemoryStorage, SQLiteStorage
 from antfarm.application.agent import ModelBackedAgent
 from antfarm.application.engine import SimulationEngine
 from antfarm.application.scheduler import StableScheduler
-from antfarm.config.schema import MockProviderConfig, ScenarioConfig
+from antfarm.config.schema import (
+    MockProviderConfig,
+    ScenarioConfig,
+    SqliteStorageConfig,
+)
 from antfarm.domain.models import AgentId, RunId, RunMetadata
 from antfarm.environments import CounterEnvironment
 from antfarm.ports.models import ModelProvider, ModelResponse
+from antfarm.ports.storage import Storage
 
 
 @dataclass(frozen=True, slots=True)
 class ComposedSimulation:
     engine: SimulationEngine
-    storage: InMemoryStorage
+    storage: Storage
     event_bus: InMemoryEventBus
 
 
 def compose(config: ScenarioConfig) -> ComposedSimulation:
     """Compose only the M0.1 runtime kinds; later kinds fail explicitly."""
-
-    if config.storage.kind != "memory":
-        raise ValueError("sqlite storage is configured but not implemented yet")
 
     if config.rules:
         raise ValueError("simulation rules are configured but not implemented yet")
@@ -65,7 +67,11 @@ def compose(config: ScenarioConfig) -> ComposedSimulation:
             provider=provider,
         )
 
-    storage = InMemoryStorage()
+    storage: Storage
+    if isinstance(config.storage, SqliteStorageConfig):
+        storage = SQLiteStorage(config.storage.path)
+    else:
+        storage = InMemoryStorage()
     run_id = RunId(config.run.id)
     storage.create_run(
         RunMetadata(run_id=run_id, seed=config.run.seed),

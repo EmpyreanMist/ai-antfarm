@@ -3,6 +3,7 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from random import Random
+from typing import cast
 
 from antfarm.application.agent import MalformedDecisionError
 from antfarm.application.scheduler import CognitionScheduler, ScheduleContext
@@ -227,6 +228,7 @@ class SimulationEngine:
             world=self._environment.snapshot(),
             memory=self._memory.snapshot(),
             scheduler=self._scheduler.snapshot(),
+            engine=self._engine_state(),
         )
         committed_events = tuple(events)
         self._storage.commit_step(self._run_id, snapshot, committed_events)
@@ -239,7 +241,41 @@ class SimulationEngine:
             world=self._environment.snapshot(),
             memory=self._memory.snapshot(),
             scheduler=self._scheduler.snapshot(),
+            engine=self._engine_state(),
         )
+
+    def restore(self, snapshot: SimulationSnapshot) -> None:
+        """Restore every stateful engine component from a durable checkpoint."""
+
+        event_sequence = snapshot.engine.get("event_sequence")
+        random_state = snapshot.engine.get("random_state")
+        if (
+            isinstance(event_sequence, bool)
+            or not isinstance(event_sequence, int)
+            or event_sequence < 0
+        ):
+            raise TypeError("engine event sequence must be a non-negative integer")
+        if not isinstance(random_state, tuple) or len(random_state) != 3:
+            raise TypeError("engine random state must be a three-item array")
+        version, internal_state, gaussian = random_state
+        if isinstance(version, bool) or not isinstance(version, int):
+            raise TypeError("engine random state version must be an integer")
+        if not isinstance(internal_state, tuple) or not all(
+            isinstance(item, int) and not isinstance(item, bool)
+            for item in internal_state
+        ):
+            raise TypeError("engine random internal state must be an integer array")
+        if gaussian is not None and not isinstance(gaussian, float):
+            raise TypeError("engine random gaussian cache must be a number or null")
+
+        self._environment.restore(snapshot.world)
+        self._memory.restore(snapshot.memory)
+        self._scheduler.restore(snapshot.scheduler)
+        self._rng.setstate(
+            cast(tuple[int, tuple[int, ...], float | None], tuple(random_state))
+        )
+        self._tick = snapshot.tick
+        self._sequence = event_sequence
 
     async def run(self, limit: RunLimit) -> RunResult:
         events: list[Event] = []
@@ -270,3 +306,10 @@ class SimulationEngine:
             causation_id=causation_id,
             payload=payload or {},
         )
+
+    def _engine_state(self) -> JsonObject:
+        version, internal_state, gaussian = self._rng.getstate()
+        return {
+            "event_sequence": self._sequence,
+            "random_state": (version, internal_state, gaussian),
+        }

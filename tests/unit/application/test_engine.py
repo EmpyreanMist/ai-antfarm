@@ -300,3 +300,17 @@ def test_seeded_random_actions_are_stable_and_ordered() -> None:
     assert [int(event.sequence) for event in first_result.events] == list(
         range(1, len(first_result.events) + 1)
     )
+
+
+def test_checkpoint_restore_continues_random_and_event_sequences() -> None:
+    alice = AgentId("alice")
+    decision = ActionProposal(actor_id=alice, kind="draw")
+    uninterrupted, _ = _engine({alice: decision}, seed=41)
+    first_step = asyncio.run(uninterrupted.step())
+    expected = asyncio.run(uninterrupted.step())
+    restored, _ = _engine({alice: decision}, seed=41)
+
+    restored.restore(first_step.snapshot)
+    actual = asyncio.run(restored.step())
+
+    assert actual == expected

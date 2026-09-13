@@ -95,6 +95,7 @@ def test_snapshot_round_trip() -> None:
         world={"value": 7},
         memory={"alice": ({"kind": "result", "value": 7},)},
         scheduler={"last_tick": 3},
+        engine={"event_sequence": 8, "random_state": (3, (1, 2, 3), None)},
     )
 
     restored = snapshot_from_data(_through_json(snapshot_to_data(snapshot)))

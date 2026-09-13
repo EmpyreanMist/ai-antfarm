@@ -100,6 +100,7 @@ def snapshot_to_data(value: SimulationSnapshot) -> dict[str, object]:
         "world": thaw_json(value.world),
         "memory": thaw_json(value.memory),
         "scheduler": thaw_json(value.scheduler),
+        "engine": thaw_json(value.engine),
     }
 
 
@@ -109,6 +110,7 @@ def snapshot_from_data(data: Mapping[str, object]) -> SimulationSnapshot:
         world=_object(data, "world"),
         memory=_object(data, "memory"),
         scheduler=_object(data, "scheduler"),
+        engine=_object(data, "engine"),
     )
 
 
