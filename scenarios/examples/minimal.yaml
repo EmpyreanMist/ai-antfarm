@@ -1,0 +1,23 @@
+schema_version: 1
+run:
+  id: minimal
+  seed: 17
+  ticks: 1
+provider:
+  kind: mock
+  decisions:
+    alice:
+      - kind: increment
+        parameters:
+          amount: 1
+    bob:
+      - kind: increment
+        parameters:
+          amount: 2
+agents:
+  - id: bob
+  - id: alice
+environment:
+  kind: counter
+  initial_value: 0
+
