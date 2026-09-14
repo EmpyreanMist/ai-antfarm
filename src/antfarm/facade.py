@@ -3,23 +3,50 @@
 from __future__ import annotations
 
 import asyncio
+import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event as StopEvent
 
 from antfarm.adapters.storage import SQLiteStorage
-from antfarm.application.continuous import ContinuousRunner
+from antfarm.application.continuous import ContinuousRunner, PacingClock
+from antfarm.application.contracts import (
+    AgentPage,
+    AgentQuery,
+    ApplicationError,
+    ErrorCode,
+    EventPage,
+    EventQuery,
+    EventView,
+    RunMode,
+    RunState,
+    RunStatus,
+    RunView,
+    SnapshotView,
+)
 from antfarm.composition import ComposedSimulation, compose
 from antfarm.config import load_scenario
 from antfarm.config.schema import ScenarioConfig, SqliteStorageConfig
 from antfarm.domain.json_values import JsonObject, freeze_object, thaw_json
-from antfarm.domain.models import Event, RunId, RunLimit, SimulationSnapshot, StoredRun
+from antfarm.domain.models import (
+    AgentId,
+    Event,
+    RunId,
+    RunLimit,
+    SimulationSnapshot,
+    StoredRun,
+    Tick,
+)
 from antfarm.population import (
     RuntimeOverrides,
     resolve_run_config,
     runtime_overrides_data,
 )
+from antfarm.ports.events import Subscription
 from antfarm.ports.storage import Storage
+
+EventViewHandler = Callable[[EventView], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +68,18 @@ class ResolvedAgentInspection:
     public: JsonObject
 
 
+@dataclass(frozen=True, slots=True)
+class StartRunCommand:
+    resolved: ResolvedRunConfiguration | ScenarioConfig
+    mode: RunMode = RunMode.BOUNDED
+    tick_seconds: float = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class StopRunCommand:
+    run_id: str
+
+
 @dataclass(slots=True)
 class ApplicationRun:
     run_id: RunId
@@ -48,6 +87,9 @@ class ApplicationRun:
     simulation: ComposedSimulation
     stop_requested: StopEvent
     task: asyncio.Task[SimulationSnapshot]
+    mode: RunMode = RunMode.BOUNDED
+    status: RunStatus = RunStatus.RUNNING
+    failure: ErrorCode | None = None
 
 
 class AntFarmApplication:
@@ -58,17 +100,31 @@ class AntFarmApplication:
         self._query_storage = storage
 
     def load_scenario(self, path: str | Path) -> ScenarioConfig:
-        return load_scenario(path)
+        try:
+            return load_scenario(path)
+        except Exception as error:
+            raise ApplicationError(
+                ErrorCode.INVALID_SCENARIO,
+                f"scenario could not be loaded: {error}",
+                details={"error_type": type(error).__name__},
+            ) from error
 
     def resolve_population(
         self,
         source: ScenarioConfig,
         overrides: RuntimeOverrides | None = None,
     ) -> ResolvedRunConfiguration:
-        return ResolvedRunConfiguration(
-            config=resolve_run_config(source, overrides),
-            runtime_overrides=runtime_overrides_data(overrides),
-        )
+        try:
+            return ResolvedRunConfiguration(
+                config=resolve_run_config(source, overrides),
+                runtime_overrides=runtime_overrides_data(overrides),
+            )
+        except ValueError as error:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"runtime overrides are invalid: {error}",
+                details={"error_type": type(error).__name__},
+            ) from error
 
     def inspect_resolved_agents(
         self, resolved: ResolvedRunConfiguration | ScenarioConfig
@@ -86,6 +142,11 @@ class AntFarmApplication:
         *,
         continuous: bool = False,
         tick_seconds: float = 1.0,
+        on_batch: Callable[[Sequence[Event]], None] | None = None,
+        clock: PacingClock | None = None,
+        should_stop: Callable[[], bool] | None = None,
+        on_waiting: Callable[[Tick, float], None] | None = None,
+        on_cognition_started: Callable[[Tick, AgentId, str], None] | None = None,
     ) -> ApplicationRun:
         selected = (
             resolved
@@ -94,9 +155,19 @@ class AntFarmApplication:
         )
         run_id = RunId(selected.config.run.id)
         if run_id in self._runs:
-            raise ValueError(f"run is already managed: {run_id}")
+            raise ApplicationError(
+                ErrorCode.CONFLICT,
+                f"run is already managed: {run_id}",
+                details={"run_id": str(run_id)},
+            )
+        if not math.isfinite(tick_seconds) or tick_seconds <= 0:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                "tick_seconds must be a finite positive number",
+            )
         simulation = compose(
             selected.config,
+            on_cognition_started=on_cognition_started,
             runtime_overrides=selected.runtime_overrides,
         )
         stop_requested = StopEvent()
@@ -107,6 +178,10 @@ class AntFarmApplication:
                 stop_requested,
                 continuous=continuous,
                 tick_seconds=tick_seconds,
+                on_batch=on_batch,
+                clock=clock,
+                should_stop=should_stop,
+                on_waiting=on_waiting,
             )
         )
         handle = ApplicationRun(
@@ -115,19 +190,136 @@ class AntFarmApplication:
             simulation=simulation,
             stop_requested=stop_requested,
             task=task,
+            mode=RunMode.CONTINUOUS if continuous else RunMode.BOUNDED,
         )
         self._runs[run_id] = handle
+        task.add_done_callback(
+            lambda completed: self._record_completion(handle, completed)
+        )
         return handle
 
+    def start(self, command: StartRunCommand) -> RunState:
+        """Start a run through the stable command surface."""
+
+        handle = self.start_run(
+            command.resolved,
+            continuous=command.mode is RunMode.CONTINUOUS,
+            tick_seconds=command.tick_seconds,
+        )
+        return self.read_run_state(handle.run_id)
+
     async def wait_run(self, run_id: RunId | str) -> SimulationSnapshot:
-        return await self._require_run(run_id).task
+        handle = self._require_run(run_id)
+        snapshot = await handle.task
+        if handle.status is RunStatus.RUNNING:
+            handle.status = (
+                RunStatus.STOPPED
+                if handle.mode is RunMode.CONTINUOUS
+                else RunStatus.COMPLETED
+            )
+        return snapshot
 
     async def stop_run(self, run_id: RunId | str) -> SimulationSnapshot:
         handle = self._require_run(run_id)
+        if handle.status in {RunStatus.COMPLETED, RunStatus.STOPPED, RunStatus.FAILED}:
+            raise ApplicationError(
+                ErrorCode.INVALID_STATE,
+                f"run cannot be stopped from state {handle.status}: {handle.run_id}",
+            )
+        handle.status = RunStatus.STOPPING
         handle.stop_requested.set()
         if not handle.task.done():
             handle.task.cancel()
-        return await handle.task
+        snapshot = await handle.task
+        handle.status = RunStatus.STOPPED
+        return snapshot
+
+    async def stop(self, command: StopRunCommand) -> RunState:
+        """Stop a continuous run and return its last atomic lifecycle state."""
+
+        await self.stop_run(command.run_id)
+        return self.read_run_state(command.run_id)
+
+    def read_run_state(self, run_id: RunId | str) -> RunState:
+        handle = self._require_run(run_id)
+        if handle.task.done() and handle.status is RunStatus.RUNNING:
+            self._record_completion(handle, handle.task)
+        return RunState(
+            run_id=str(handle.run_id),
+            mode=handle.mode,
+            status=handle.status,
+            tick=int(handle.simulation.engine.snapshot().tick),
+            failure=handle.failure,
+        )
+
+    def query_run(self, run_id: RunId | str) -> RunView:
+        selected = RunId(str(run_id))
+        try:
+            stored = self.read_run(selected)
+        except ValueError as error:
+            raise ApplicationError(
+                ErrorCode.NOT_FOUND,
+                f"run was not found: {selected}",
+                details={"run_id": str(selected)},
+            ) from error
+        if stored is None:
+            raise ApplicationError(
+                ErrorCode.NOT_FOUND,
+                f"run was not found: {selected}",
+                details={"run_id": str(selected)},
+            )
+        return RunView(
+            run_id=str(stored.metadata.run_id),
+            seed=stored.metadata.seed,
+            runtime_overrides=stored.metadata.runtime_overrides,
+            scenario=stored.scenario,
+        )
+
+    def query_agents(self, query: AgentQuery) -> AgentPage[ResolvedAgentInspection]:
+        self.query_run(query.run_id)
+        agents = self.read_agents(query.run_id)
+        end = query.offset + query.limit
+        items = agents[query.offset:end]
+        next_offset = end if end < len(agents) else None
+        return AgentPage(items=items, next_offset=next_offset)
+
+    def query_snapshot(self, run_id: RunId | str) -> SnapshotView | None:
+        self.query_run(run_id)
+        snapshot = self.read_snapshot(run_id)
+        if snapshot is None:
+            return None
+        return SnapshotView(
+            run_id=str(run_id),
+            tick=int(snapshot.tick),
+            world=snapshot.world,
+            metrics=snapshot.metrics,
+        )
+
+    def query_events(self, query: EventQuery) -> EventPage:
+        self.query_run(query.run_id)
+        events = self._read_filtered_events(query, limit=query.limit + 1)
+        has_more = len(events) > query.limit
+        selected = events[: query.limit]
+        return EventPage(
+            items=tuple(event_view(event) for event in selected),
+            next_after=(int(selected[-1].sequence) if has_more and selected else None),
+        )
+
+    def subscribe_events(
+        self,
+        run_id: RunId | str,
+        kinds: set[str],
+        handler: EventViewHandler,
+    ) -> Subscription:
+        handle = self._require_run(run_id)
+        if not kinds or any(not kind for kind in kinds):
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                "at least one non-empty event kind is required",
+            )
+        return handle.simulation.event_bus.subscribe(
+            kinds, lambda event: handler(event_view(event))
+        )
 
     def read_run(self, run_id: RunId | str) -> StoredRun | None:
         selected = RunId(str(run_id))
@@ -197,14 +389,83 @@ class AntFarmApplication:
                 return tuple(storage.read_events(selected, after=after))
         return tuple(handle.simulation.storage.read_events(selected, after=after))
 
+    def _read_filtered_events(
+        self, query: EventQuery, *, limit: int
+    ) -> tuple[Event, ...]:
+        selected = RunId(query.run_id)
+        handle = self._runs.get(selected)
+        if handle is None:
+            if self._query_storage is None:
+                raise ApplicationError(
+                    ErrorCode.NOT_FOUND,
+                    f"run is not managed by this application: {selected}",
+                )
+            return tuple(
+                self._query_storage.read_events(
+                    selected,
+                    after=query.after,
+                    limit=limit,
+                    kinds=query.kinds,
+                    actor_id=query.actor_id,
+                    from_tick=query.from_tick,
+                    to_tick=query.to_tick,
+                )
+            )
+        if (
+            isinstance(handle.resolved.config.storage, SqliteStorageConfig)
+            and handle.task.done()
+        ):
+            with SQLiteStorage(handle.resolved.config.storage.path) as storage:
+                return tuple(
+                    storage.read_events(
+                        selected,
+                        after=query.after,
+                        limit=limit,
+                        kinds=query.kinds,
+                        actor_id=query.actor_id,
+                        from_tick=query.from_tick,
+                        to_tick=query.to_tick,
+                    )
+                )
+        return tuple(
+            handle.simulation.storage.read_events(
+                selected,
+                after=query.after,
+                limit=limit,
+                kinds=query.kinds,
+                actor_id=query.actor_id,
+                from_tick=query.from_tick,
+                to_tick=query.to_tick,
+            )
+        )
+
     def _require_run(self, run_id: RunId | str) -> ApplicationRun:
         selected = RunId(str(run_id))
         try:
             return self._runs[selected]
         except KeyError as error:
-            raise ValueError(
+            raise ApplicationError(
+                ErrorCode.NOT_FOUND,
                 f"run is not managed by this application: {selected}"
             ) from error
+
+    @staticmethod
+    def _record_completion(
+        handle: ApplicationRun, task: asyncio.Task[SimulationSnapshot]
+    ) -> None:
+        if task.cancelled():
+            handle.status = RunStatus.STOPPED
+            return
+        if task.exception() is not None:
+            handle.status = RunStatus.FAILED
+            handle.failure = ErrorCode.EXECUTION_FAILED
+            return
+        handle.status = (
+            RunStatus.STOPPED
+            if handle.status is RunStatus.STOPPING
+            or handle.mode is RunMode.CONTINUOUS
+            else RunStatus.COMPLETED
+        )
 
     @staticmethod
     async def _execute(
@@ -214,13 +475,23 @@ class AntFarmApplication:
         *,
         continuous: bool,
         tick_seconds: float,
+        on_batch: Callable[[Sequence[Event]], None] | None,
+        clock: PacingClock | None,
+        should_stop: Callable[[], bool] | None,
+        on_waiting: Callable[[Tick, float], None] | None,
     ) -> SimulationSnapshot:
         try:
             if continuous:
                 continuous_result = await ContinuousRunner(
                     simulation.engine,
                     tick_seconds=tick_seconds,
-                    should_stop=stop_requested.is_set,
+                    on_batch=on_batch,
+                    clock=clock,
+                    should_stop=(
+                        lambda: stop_requested.is_set()
+                        or (should_stop is not None and should_stop())
+                    ),
+                    on_waiting=on_waiting,
                 ).run()
                 return continuous_result.snapshot
             bounded_result = await simulation.engine.run(
@@ -231,6 +502,22 @@ class AntFarmApplication:
             return simulation.engine.snapshot()
         finally:
             await simulation.close()
+
+
+def event_view(event: Event) -> EventView:
+    """Project an internal domain event into the stable service contract."""
+
+    return EventView(
+        schema_version=event.schema_version,
+        event_id=event.event_id,
+        run_id=str(event.run_id),
+        sequence=int(event.sequence),
+        tick=int(event.tick),
+        kind=event.kind,
+        actor_id=str(event.actor_id) if event.actor_id is not None else None,
+        causation_id=event.causation_id,
+        payload=event.payload,
+    )
 
 
 def inspect_resolved_agents(

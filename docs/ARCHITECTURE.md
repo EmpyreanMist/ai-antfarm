@@ -8,12 +8,11 @@ adapters handle model APIs, memory implementations, persistence, presentation,
 and transports. Imports point inward: domain code must not import adapters,
 databases, HTTP clients, OASIS, CAMEL, provider SDKs, CLI code, or frontend code.
 
-The current execution topology is one Python 3.12+ process with one simulation
-engine and one SQLite writer. The public surface is an installable library plus a
-small CLI. The next milestone strengthens rich agent configuration and the shared
-application/service layer; HTTP, WebSockets, and the Next.js frontend follow only
-after those use cases are stable. Distributed workers and dynamic plugin discovery
-remain deferred.
+The current execution topology is one Python 3.12+ process per application
+service, with one simulation engine and storage writer per managed run. The public
+surface is an installable library plus a small CLI. The shared application/service
+contracts are stable; HTTP, WebSockets, and the Next.js frontend follow in later
+milestones. Distributed workers and dynamic plugin discovery remain deferred.
 
 ## Target Application Topology
 
@@ -258,6 +257,26 @@ stored run metadata, resolved agents, the latest snapshot, and ordered events.
 It can also be given an existing `Storage` implementation for historical queries;
 those agent views are reconstructed from the stored resolved configuration, never
 from the current source YAML.
+
+The stable M4 surface is additive to those lower-level compatibility methods.
+Start and stop commands return immutable lifecycle views rather than composed
+simulations. A facade owns one process-local task per run ID; a second start for
+that ID is a conflict, while distinct IDs may run concurrently on the same event
+loop. Bounded runs finish at the scenario tick limit. Continuous runs have no
+implicit deadline and stop only through their stop signal, task cancellation, an
+observer failure, or a runtime failure. Stopping returns the last complete atomic
+snapshot, and terminal runs cannot be stopped again.
+
+Queries project stored values into immutable run, agent, snapshot, and event
+views. They do not expose `StoredRun`, `SimulationSnapshot`, `Event`, SQLite rows,
+or a composed engine as transport contracts. Agent pages use stable resolved
+order and an offset. Event pages use the monotonic event sequence as an exclusive
+cursor, are always ordered, and can filter by event kind, actor, and inclusive
+tick bounds. Page sizes are limited to 1--1,000 items. Cancellable process-local
+subscriptions project only committed events; a subscriber uses durable cursor
+queries to fill gaps after late subscription or reconnection. Stable application
+errors carry a machine-readable code and bounded structured details, leaving HTTP
+status mapping to M5.
 
 Rich profile and population resolution belongs at the domain/application boundary:
 the domain defines validated profile, visibility, and resolved-population values;

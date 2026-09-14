@@ -3,7 +3,7 @@ import sys
 import pytest
 
 from antfarm import cli
-from antfarm.domain import AgentId, Event, EventSequence, RunId, Tick
+from antfarm.application import EventView
 from antfarm.runner import RunSummary
 
 
@@ -13,14 +13,14 @@ def _failed_summary() -> RunSummary:
         ticks=1,
         final_state={"value": 0},
         events=(
-            Event(
+            EventView(
                 schema_version=1,
                 event_id="failed-run:1",
-                run_id=RunId("failed-run"),
-                sequence=EventSequence(1),
-                tick=Tick(1),
+                run_id="failed-run",
+                sequence=1,
+                tick=1,
                 kind="cognition.failed",
-                actor_id=AgentId("alice"),
+                actor_id="alice",
                 causation_id=None,
                 payload={"reason": "ConnectionError"},
             ),

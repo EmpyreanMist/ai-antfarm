@@ -28,7 +28,7 @@ shared society. The next constraint is behavioral sameness: profiles, incentives
 economic differences, visibility, and population generation are not yet rich
 enough to sustain meaningfully distinct behavior.
 
-## M3: Rich Agents, Economy, and Randomized Societies — Next
+## M3: Rich Agents, Economy, and Randomized Societies
 
 **Outcome:** agent differences are configurable, validated, inspectable,
 reproducible, available to cognition, selectively observable by other agents, and
@@ -147,12 +147,42 @@ network API, and frontend code.
 
 ## M4: Stable Application and Service Layer
 
+**Status: Complete.** Implemented as an additive service contract over the M3
+facade. Existing `runner` and direct facade entry points remain compatible, while
+new transports can use typed commands, lifecycle/query DTOs, bounded pages,
+stable errors, and post-commit event subscriptions without receiving engine,
+domain, or persistence objects.
+
 Consolidate transport-neutral commands, queries, lifecycle management, error
 contracts, and event subscriptions around the M3 application facade. Remove any
 remaining CLI-only orchestration so CLI, tests, and future transports execute the
 same behavior. Define pagination, filtering, concurrency, and long-running-run
 semantics only as required by the control API. Keep persistence models and domain
 objects from becoming accidental public transport contracts.
+
+- Define bounded and continuous start/stop commands with explicit running,
+  stopping, completed, stopped, and failed states. A facade owns at most one task
+  per run ID, rejects duplicate ownership with a stable conflict error, and can
+  run different IDs concurrently in the same event loop.
+- Expose immutable run, snapshot, agent, event, page, and error DTOs. Stable error
+  codes distinguish invalid arguments, invalid scenarios, missing resources,
+  conflicts, invalid lifecycle transitions, and execution failures.
+- Bound agent and event pages to at most 1,000 items. Event queries use an ordered
+  sequence cursor and support kind, actor, and inclusive tick filtering in both
+  memory and SQLite storage; agent queries use a deterministic offset.
+- Deliver selected committed events as transport-neutral event views through
+  cancellable subscriptions. Durable event queries remain the recovery path for
+  consumers that subscribe late or reconnect.
+- Centralize finite and continuous composition, execution, pacing, cancellation,
+  cleanup, and post-commit batch handling in `AntFarmApplication`. The legacy
+  runner keeps only scenario/live presentation compatibility and delegates run
+  ownership to that service.
+- Keep the continuous runner non-accumulating and explicitly stoppable. Stop and
+  cancellation return the last complete atomic snapshot; terminal states reject
+  repeated stop commands.
+- Cover lifecycle transitions, conflicts, validation, pagination, filtering,
+  subscriptions, SQLite parity, CLI compatibility, and live output behavior with
+  offline automated tests.
 
 ## M5: HTTP and WebSocket Control API
 

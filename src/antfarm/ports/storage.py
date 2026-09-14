@@ -31,4 +31,14 @@ class Storage(Protocol):
 
     def read_run(self, run_id: RunId) -> StoredRun | None: ...
 
-    def read_events(self, run_id: RunId, after: int = 0) -> Iterable[Event]: ...
+    def read_events(
+        self,
+        run_id: RunId,
+        after: int = 0,
+        *,
+        limit: int | None = None,
+        kinds: frozenset[str] = frozenset(),
+        actor_id: str | None = None,
+        from_tick: int | None = None,
+        to_tick: int | None = None,
+    ) -> Iterable[Event]: ...

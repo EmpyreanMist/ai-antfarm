@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TextIO
 
+from antfarm.application.contracts import EventView
 from antfarm.config.schema import ScenarioConfig, SqliteStorageConfig
 from antfarm.domain.json_values import JsonObject, thaw_json
 from antfarm.domain.models import AgentId, Event, Tick
@@ -36,7 +37,7 @@ class LiveTerminalObserver:
     def event_kinds(self) -> set[str]:
         return set(VISIBLE_EVENT_KINDS)
 
-    def observe(self, event: Event) -> None:
+    def observe(self, event: Event | EventView) -> None:
         if self.failure is not None:
             return
         try:
@@ -143,7 +144,7 @@ def checkpoint_location(config: ScenarioConfig) -> str:
     return "memory (not durable)"
 
 
-def _format_event(event: Event) -> str:
+def _format_event(event: Event | EventView) -> str:
     actor = _display_name(event.actor_id) if event.actor_id is not None else "System"
     prefix = f"[tick {int(event.tick)}] {actor}"
     payload = event.payload

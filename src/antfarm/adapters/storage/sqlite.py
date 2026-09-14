@@ -187,15 +187,41 @@ class SQLiteStorage:
             scenario=_decode_object(cast(str, row[1])),
         )
 
-    def read_events(self, run_id: RunId, after: int = 0) -> Iterable[Event]:
-        rows = self._connection.execute(
-            """
-            SELECT event_json FROM events
-            WHERE run_id = ? AND sequence > ?
-            ORDER BY sequence
-            """,
-            (str(run_id), after),
-        ).fetchall()
+    def read_events(
+        self,
+        run_id: RunId,
+        after: int = 0,
+        *,
+        limit: int | None = None,
+        kinds: frozenset[str] = frozenset(),
+        actor_id: str | None = None,
+        from_tick: int | None = None,
+        to_tick: int | None = None,
+    ) -> Iterable[Event]:
+        clauses = ["run_id = ?", "sequence > ?"]
+        parameters: list[object] = [str(run_id), after]
+        if kinds:
+            placeholders = ", ".join("?" for _ in kinds)
+            clauses.append(f"json_extract(event_json, '$.kind') IN ({placeholders})")
+            parameters.extend(sorted(kinds))
+        if actor_id is not None:
+            clauses.append("json_extract(event_json, '$.actor_id') = ?")
+            parameters.append(actor_id)
+        if from_tick is not None:
+            clauses.append("json_extract(event_json, '$.tick') >= ?")
+            parameters.append(from_tick)
+        if to_tick is not None:
+            clauses.append("json_extract(event_json, '$.tick') <= ?")
+            parameters.append(to_tick)
+        query = (
+            "SELECT event_json FROM events WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY sequence"
+        )
+        if limit is not None:
+            query += " LIMIT ?"
+            parameters.append(limit)
+        rows = self._connection.execute(query, parameters).fetchall()
         return tuple(
             event_from_data(_decode_object(cast(str, row[0]))) for row in rows
         )

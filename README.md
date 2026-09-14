@@ -139,6 +139,25 @@ facade with an open `SQLiteStorage`. The stored resolved configuration and
 runtime-override provenance are used, so changing the source scenario cannot
 regenerate or alter historical agents.
 
+Transport adapters should use the stable command/query contracts instead of the
+compatibility handle:
+
+```python
+from antfarm.application import EventQuery, RunStatus
+from antfarm.facade import StartRunCommand
+
+state = application.start(StartRunCommand(resolved))
+snapshot = await application.wait_run(state.run_id)
+assert application.read_run_state(state.run_id).status is RunStatus.COMPLETED
+page = application.query_events(EventQuery(state.run_id, limit=100))
+```
+
+Event pages are ordered by sequence and expose `next_after`; optional kind,
+actor, and inclusive tick filters are applied by storage. Agent pages use offsets.
+Both are capped at 1,000 items. Different run IDs can execute concurrently in one
+application, while duplicate IDs return a stable `conflict` error. Continuous
+runs remain active until stopped and return their last complete atomic snapshot.
+
 The finite social mock example adds validated `say` actions while staying fully
 offline:
 

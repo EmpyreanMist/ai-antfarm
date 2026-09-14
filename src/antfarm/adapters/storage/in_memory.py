@@ -1,6 +1,7 @@
 """Process-local implementation of the storage boundary."""
 
 from collections.abc import Iterable, Mapping, Sequence
+from itertools import islice
 
 from antfarm.domain.json_values import freeze_object
 from antfarm.domain.models import (
@@ -52,7 +53,26 @@ class InMemoryStorage:
             return None
         return StoredRun(metadata=metadata, scenario=freeze_object(scenario))
 
-    def read_events(self, run_id: RunId, after: int = 0) -> Iterable[Event]:
-        return tuple(
-            event for event in self.events.get(run_id, ()) if event.sequence > after
+    def read_events(
+        self,
+        run_id: RunId,
+        after: int = 0,
+        *,
+        limit: int | None = None,
+        kinds: frozenset[str] = frozenset(),
+        actor_id: str | None = None,
+        from_tick: int | None = None,
+        to_tick: int | None = None,
+    ) -> Iterable[Event]:
+        events = (
+            event
+            for event in self.events.get(run_id, ())
+            if event.sequence > after
+            and (not kinds or event.kind in kinds)
+            and (actor_id is None or event.actor_id == actor_id)
+            and (from_tick is None or event.tick >= from_tick)
+            and (to_tick is None or event.tick <= to_tick)
         )
+        if limit is None:
+            return tuple(events)
+        return tuple(islice(events, limit))

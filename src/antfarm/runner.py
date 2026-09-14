@@ -1,53 +1,39 @@
 """Scenario execution facade used by the CLI and tests."""
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from types import MappingProxyType
 from typing import TextIO
 from uuid import uuid4
 
 from antfarm.adapters.models.ollama import OllamaModelPreflight
 from antfarm.adapters.terminal import LiveTerminalObserver, checkpoint_location
-from antfarm.application.continuous import ContinuousRunner, PacingClock
-from antfarm.composition import compose
+from antfarm.application.continuous import PacingClock
+from antfarm.application.contracts import RunSummary as RunSummary
 from antfarm.config import load_scenario
 from antfarm.config.schema import OpenAICompatibleProviderConfig, ScenarioConfig
-from antfarm.domain.json_values import JsonObject
-from antfarm.domain.models import AgentId, Event, RunLimit, Tick
+from antfarm.domain.models import AgentId, Event, Tick
+from antfarm.facade import AntFarmApplication, event_view
 from antfarm.population import (
     RuntimeOverrides,
     resolve_run_config,
-    runtime_overrides_data,
 )
 
 
-@dataclass(frozen=True, slots=True)
-class RunSummary:
-    run_id: str
-    ticks: int
-    final_state: JsonObject
-    events: tuple[Event, ...]
-    metrics: JsonObject = field(default_factory=lambda: MappingProxyType({}))
-    active_agent_count: int = 0
-    checkpoint: str = "memory (not durable)"
-
-
 async def run_scenario(path: str | Path) -> RunSummary:
-    config = resolve_run_config(load_scenario(path))
-    simulation = compose(config)
-    try:
-        result = await simulation.engine.run(RunLimit(ticks=config.run.ticks))
-        return RunSummary(
-            run_id=config.run.id,
-            ticks=int(result.snapshot.tick),
-            final_state=result.snapshot.world,
-            events=tuple(result.events),
-            metrics=result.snapshot.metrics,
-        )
-    finally:
-        await simulation.close()
+    application = AntFarmApplication()
+    resolved = application.resolve_population(load_scenario(path))
+    handle = application.start_run(resolved)
+    snapshot = await application.wait_run(handle.run_id)
+    return RunSummary(
+        run_id=str(handle.run_id),
+        ticks=int(snapshot.tick),
+        final_state=snapshot.world,
+        events=tuple(
+            event_view(event) for event in application.read_events(handle.run_id)
+        ),
+        metrics=snapshot.metrics,
+    )
 
 
 async def run_continuous_scenario(
@@ -58,23 +44,22 @@ async def run_continuous_scenario(
 ) -> RunSummary:
     """Run until cancellation without accumulating committed event batches."""
 
-    config = resolve_run_config(load_scenario(path))
-    simulation = compose(config)
-    try:
-        result = await ContinuousRunner(
-            simulation.engine,
-            tick_seconds=tick_seconds,
-            on_batch=on_batch,
-        ).run()
-        return RunSummary(
-            run_id=config.run.id,
-            ticks=int(result.snapshot.tick),
-            final_state=result.snapshot.world,
-            events=(),
-            metrics=result.snapshot.metrics,
-        )
-    finally:
-        await simulation.close()
+    application = AntFarmApplication()
+    resolved = application.resolve_population(load_scenario(path))
+    handle = application.start_run(
+        resolved,
+        continuous=True,
+        tick_seconds=tick_seconds,
+        on_batch=on_batch,
+    )
+    snapshot = await application.wait_run(handle.run_id)
+    return RunSummary(
+        run_id=str(handle.run_id),
+        ticks=int(snapshot.tick),
+        final_state=snapshot.world,
+        events=(),
+        metrics=snapshot.metrics,
+    )
 
 
 def prepare_live_config(
@@ -136,41 +121,43 @@ async def run_live_scenario(
             resolved.model,
         )
 
-    simulation = compose(
+    def batch_completed(events: Sequence[Event]) -> None:
+        del events
+        terminal.raise_if_failed()
+
+    application = AntFarmApplication()
+    resolved = application.resolve_population(
         config,
-        on_cognition_started=cognition_started if verbose else None,
-        runtime_overrides=runtime_overrides_data(
-            RuntimeOverrides(
-                active_agents=config.run.active_agents,
-                model=model,
-                run_id=config.run.id,
-            )
+        RuntimeOverrides(
+            active_agents=config.run.active_agents,
+            model=model,
+            run_id=config.run.id,
         ),
     )
-    subscription = simulation.event_bus.subscribe(
+    handle = application.start_run(
+        resolved,
+        continuous=True,
+        tick_seconds=tick_seconds,
+        on_cognition_started=cognition_started if verbose else None,
+        clock=clock,
+        should_stop=should_stop,
+        on_waiting=terminal.waiting if verbose else None,
+        on_batch=batch_completed,
+    )
+    subscription = application.subscribe_events(
+        handle.run_id,
         terminal.event_kinds, terminal.observe
     )
     try:
         terminal.header(config, tick_seconds=tick_seconds)
 
-        def batch_completed(events: Sequence[Event]) -> None:
-            del events
-            terminal.raise_if_failed()
-
-        result = await ContinuousRunner(
-            simulation.engine,
-            tick_seconds=tick_seconds,
-            clock=clock,
-            on_batch=batch_completed,
-            should_stop=should_stop,
-            on_waiting=terminal.waiting if verbose else None,
-        ).run()
+        snapshot = await application.wait_run(handle.run_id)
         summary = RunSummary(
             run_id=config.run.id,
-            ticks=int(result.snapshot.tick),
-            final_state=result.snapshot.world,
+            ticks=int(snapshot.tick),
+            final_state=snapshot.world,
             events=(),
-            metrics=result.snapshot.metrics,
+            metrics=snapshot.metrics,
             active_agent_count=len(config.active_agents()),
             checkpoint=checkpoint_location(config),
         )
@@ -184,7 +171,6 @@ async def run_live_scenario(
         return summary
     finally:
         subscription.cancel()
-        await simulation.close()
 
 
 def _fresh_run_id(base: str) -> str:

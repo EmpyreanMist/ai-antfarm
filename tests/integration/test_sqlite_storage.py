@@ -6,6 +6,7 @@ import pytest
 
 from antfarm.adapters.storage import SQLiteStorage
 from antfarm.domain import (
+    AgentId,
     Event,
     EventSequence,
     RunId,
@@ -15,15 +16,22 @@ from antfarm.domain import (
 )
 
 
-def _event(run_id: RunId, sequence: int, *, event_id: str | None = None) -> Event:
+def _event(
+    run_id: RunId,
+    sequence: int,
+    *,
+    event_id: str | None = None,
+    kind: str = "test.event",
+    actor_id: AgentId | None = None,
+) -> Event:
     return Event(
         schema_version=1,
         event_id=event_id or f"{run_id}:{sequence}",
         run_id=run_id,
         sequence=EventSequence(sequence),
         tick=Tick(sequence),
-        kind="test.event",
-        actor_id=None,
+        kind=kind,
+        actor_id=actor_id,
         causation_id=None,
         payload={"sequence": sequence},
     )
@@ -143,3 +151,32 @@ def test_existing_database_is_migrated_for_runtime_override_provenance(
 
     assert stored is not None
     assert stored.metadata.runtime_overrides == {}
+
+
+def test_event_query_filters_and_limits_are_applied_in_sqlite(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "filtered.db"
+    run_id = RunId("filtered-run")
+    events = (
+        _event(run_id, 1, kind="action.applied", actor_id=AgentId("alice")),
+        _event(run_id, 2, kind="action.rejected", actor_id=AgentId("bob")),
+        _event(run_id, 3, kind="action.applied", actor_id=AgentId("alice")),
+    )
+
+    with SQLiteStorage(database) as storage:
+        storage.create_run(RunMetadata(run_id=run_id, seed=5), {})
+        storage.commit_step(run_id, _snapshot(3), events)
+
+        selected = tuple(
+            storage.read_events(
+                run_id,
+                kinds=frozenset({"action.applied"}),
+                actor_id="alice",
+                from_tick=2,
+                to_tick=3,
+                limit=1,
+            )
+        )
+
+    assert selected == events[2:]
