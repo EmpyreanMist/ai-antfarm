@@ -216,6 +216,7 @@ class Storage(Protocol):
         events: Sequence[Event],
     ) -> None: ...
     def load_latest(self, run_id: RunId) -> StoredCheckpoint | None: ...
+    def read_run(self, run_id: RunId) -> StoredRun | None: ...
     def read_events(self, run_id: RunId, after: int = 0) -> Iterable[Event]: ...
 ```
 
@@ -250,6 +251,14 @@ When the run starts, persistence records the resolved configuration and relevant
 overrides so historical runs do not depend on regenerating data from a later
 version of the source scenario.
 
+`AntFarmApplication` is the transport-neutral facade over these operations. It
+loads and resolves scenarios, projects resolved-agent configuration and public
+fields before composition, manages bounded or continuous run tasks, and queries
+stored run metadata, resolved agents, the latest snapshot, and ordered events.
+It can also be given an existing `Storage` implementation for historical queries;
+those agent views are reconstructed from the stored resolved configuration, never
+from the current source YAML.
+
 Rich profile and population resolution belongs at the domain/application boundary:
 the domain defines validated profile, visibility, and resolved-population values;
 application services orchestrate deterministic generation and overrides. CLI,
@@ -282,6 +291,12 @@ and recipient selection.
 ## Persistence, Events, and Replay
 
 SQLite is the first `Storage` adapter. One short transaction per step stores the ordered event batch and latest checkpoint. Checkpoints, not an event fold, are the M0 recovery source of truth. Memory, scheduler, metric-summary, event-sequence, and pseudorandom-generator state needed to continue a run are included in the checkpoint contract.
+
+Run metadata stores the effective generation seed and explicit runtime-override
+provenance alongside normalized resolved scenario JSON. Rich profiles therefore
+retain their resolved traits and initial economic facts across process restarts.
+Reputation and directed relationship values are static profile facts with the
+same public/private visibility boundary; changing them during a run is deferred.
 
 Events support audit and metrics now and prepare for replay later. A future replay reads recorded accepted actions and outcomes; it must not call a model again. Raw prompts and responses are not persisted by default because they may contain secrets or personal data. Full event sourcing, branching histories, retention automation, and Postgres are deferred.
 

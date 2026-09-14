@@ -6,13 +6,14 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
-from antfarm.domain.json_values import freeze_object, thaw_json
+from antfarm.domain.json_values import JsonObject, freeze_object, thaw_json
 from antfarm.domain.models import (
     Event,
     RunId,
     RunMetadata,
     SimulationSnapshot,
     StoredCheckpoint,
+    StoredRun,
 )
 from antfarm.domain.serialization import (
     event_from_data,
@@ -33,7 +34,8 @@ class SQLiteStorage:
             CREATE TABLE IF NOT EXISTS runs (
                 run_id TEXT PRIMARY KEY,
                 seed INTEGER NOT NULL,
-                scenario_json TEXT NOT NULL
+                scenario_json TEXT NOT NULL,
+                runtime_overrides_json TEXT NOT NULL DEFAULT '{}'
             );
             CREATE TABLE IF NOT EXISTS events (
                 run_id TEXT NOT NULL,
@@ -52,6 +54,16 @@ class SQLiteStorage:
             );
             """
         )
+        columns = {
+            cast(str, row[1])
+            for row in self._connection.execute("PRAGMA table_info(runs)").fetchall()
+        }
+        if "runtime_overrides_json" not in columns:
+            with self._connection:
+                self._connection.execute(
+                    "ALTER TABLE runs ADD COLUMN runtime_overrides_json "
+                    "TEXT NOT NULL DEFAULT '{}'"
+                )
 
     def close(self) -> None:
         self._connection.close()
@@ -67,11 +79,16 @@ class SQLiteStorage:
         try:
             with self._connection:
                 self._connection.execute(
-                    "INSERT INTO runs (run_id, seed, scenario_json) VALUES (?, ?, ?)",
+                    """
+                    INSERT INTO runs
+                        (run_id, seed, scenario_json, runtime_overrides_json)
+                    VALUES (?, ?, ?, ?)
+                    """,
                     (
                         str(metadata.run_id),
                         metadata.seed,
                         _encode_json(scenario_data),
+                        _encode_json(thaw_json(metadata.runtime_overrides)),
                     ),
                 )
         except sqlite3.IntegrityError as error:
@@ -151,6 +168,25 @@ class SQLiteStorage:
         data = _decode_object(cast(str, row[0]))
         return StoredCheckpoint(run_id=run_id, snapshot=snapshot_from_data(data))
 
+    def read_run(self, run_id: RunId) -> StoredRun | None:
+        row = self._connection.execute(
+            """
+            SELECT seed, scenario_json, runtime_overrides_json
+            FROM runs WHERE run_id = ?
+            """,
+            (str(run_id),),
+        ).fetchone()
+        if row is None:
+            return None
+        return StoredRun(
+            metadata=RunMetadata(
+                run_id=run_id,
+                seed=cast(int, row[0]),
+                runtime_overrides=_decode_object(cast(str, row[2])),
+            ),
+            scenario=_decode_object(cast(str, row[1])),
+        )
+
     def read_events(self, run_id: RunId, after: int = 0) -> Iterable[Event]:
         rows = self._connection.execute(
             """
@@ -169,8 +205,8 @@ def _encode_json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
-def _decode_object(value: str) -> Mapping[str, object]:
+def _decode_object(value: str) -> JsonObject:
     decoded = json.loads(value)
     if not isinstance(decoded, dict):
         raise TypeError("stored JSON value must be an object")
-    return cast(dict[str, object], decoded)
+    return freeze_object(cast(dict[str, object], decoded))

@@ -123,6 +123,26 @@ class CommonsEnvironment:
             if public_status.standing is not None:
                 status["standing"] = public_status.standing
             profile["social_status"] = status
+        if public_profile is not None and public_profile.reputation is not None:
+            public_reputation = public_profile.reputation
+            reputation: dict[str, object] = {}
+            if public_reputation.score is not None:
+                reputation["score"] = public_reputation.score
+            if public_reputation.labels:
+                reputation["labels"] = tuple(public_reputation.labels)
+            profile["reputation"] = reputation
+        if public_profile is not None and public_profile.relationships:
+            profile["relationships"] = {
+                str(agent_id): {
+                    "kind": relationship.kind,
+                    **(
+                        {"strength": relationship.strength}
+                        if relationship.strength is not None
+                        else {}
+                    ),
+                }
+                for agent_id, relationship in public_profile.relationships.items()
+            }
         member_visibility = self._visibility.get(member_id, InformationVisibility())
         if member_visibility.possessions == "public":
             existing_economics = profile.get("economics")

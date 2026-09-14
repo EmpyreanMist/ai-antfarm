@@ -56,7 +56,6 @@ def test_agent_pools_expand_in_stable_order() -> None:
         {"id_prefix": "zeta", "count": 2, "model_ref": "deterministic"},
         {"id_prefix": "beta", "count": 1, "model_ref": "deterministic"},
     ]
-
     config = ScenarioConfig.model_validate(data)
 
     assert [agent.id for agent in config.expand_agents()] == [
@@ -65,6 +64,35 @@ def test_agent_pools_expand_in_stable_order() -> None:
         "zeta-002",
     ]
 
+
+def test_static_reputation_and_relationship_values_validate_references() -> None:
+    data = _valid_data()
+    data["personalities"] = {}
+    data["profiles"] = {
+        "connected": {
+            "reputation": {"score": 0.8, "labels": ["reliable"]},
+            "relationships": {
+                "bob": {"kind": "friend", "strength": 0.7}
+            },
+            "visibility": {"reputation": "public", "relationships": "public"},
+        },
+        "other": {"reputation": {"labels": ["newcomer"]}},
+    }
+    data["agents"] = [
+        {"id": "alice", "model_ref": "deterministic", "profile_ref": "connected"},
+        {"id": "bob", "model_ref": "deterministic", "profile_ref": "other"},
+    ]
+
+    config = ScenarioConfig.model_validate(data)
+
+    assert config.profiles["connected"].relationships["bob"].strength == 0.7
+
+    invalid = copy.deepcopy(data)
+    invalid["profiles"]["connected"]["relationships"] = {  # type: ignore[index]
+        "missing": {"kind": "friend"}
+    }
+    with pytest.raises(ValidationError, match="relationships reference unknown agents"):
+        ScenarioConfig.model_validate(invalid)
 
 def test_rich_profile_validates_all_independent_traits_and_conflicts() -> None:
     data = _valid_data()

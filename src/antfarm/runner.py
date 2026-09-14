@@ -16,7 +16,11 @@ from antfarm.config import load_scenario
 from antfarm.config.schema import OpenAICompatibleProviderConfig, ScenarioConfig
 from antfarm.domain.json_values import JsonObject
 from antfarm.domain.models import AgentId, Event, RunLimit, Tick
-from antfarm.population import RuntimeOverrides, resolve_run_config
+from antfarm.population import (
+    RuntimeOverrides,
+    resolve_run_config,
+    runtime_overrides_data,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +139,13 @@ async def run_live_scenario(
     simulation = compose(
         config,
         on_cognition_started=cognition_started if verbose else None,
+        runtime_overrides=runtime_overrides_data(
+            RuntimeOverrides(
+                active_agents=config.run.active_agents,
+                model=model,
+                run_id=config.run.id,
+            )
+        ),
     )
     subscription = simulation.event_bus.subscribe(
         terminal.event_kinds, terminal.observe

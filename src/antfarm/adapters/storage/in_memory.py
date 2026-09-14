@@ -2,12 +2,14 @@
 
 from collections.abc import Iterable, Mapping, Sequence
 
+from antfarm.domain.json_values import freeze_object
 from antfarm.domain.models import (
     Event,
     RunId,
     RunMetadata,
     SimulationSnapshot,
     StoredCheckpoint,
+    StoredRun,
 )
 
 
@@ -42,6 +44,13 @@ class InMemoryStorage:
         if snapshot is None:
             return None
         return StoredCheckpoint(run_id=run_id, snapshot=snapshot)
+
+    def read_run(self, run_id: RunId) -> StoredRun | None:
+        metadata = self.metadata.get(run_id)
+        scenario = self.scenarios.get(run_id)
+        if metadata is None or scenario is None:
+            return None
+        return StoredRun(metadata=metadata, scenario=freeze_object(scenario))
 
     def read_events(self, run_id: RunId, after: int = 0) -> Iterable[Event]:
         return tuple(

@@ -9,6 +9,7 @@ from antfarm.domain.models import (
     RunMetadata,
     SimulationSnapshot,
     StoredCheckpoint,
+    StoredRun,
 )
 
 
@@ -27,5 +28,7 @@ class Storage(Protocol):
     ) -> None: ...
 
     def load_latest(self, run_id: RunId) -> StoredCheckpoint | None: ...
+
+    def read_run(self, run_id: RunId) -> StoredRun | None: ...
 
     def read_events(self, run_id: RunId, after: int = 0) -> Iterable[Event]: ...

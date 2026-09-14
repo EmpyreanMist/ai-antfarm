@@ -1,0 +1,60 @@
+schema_version: 1
+run: {id: society-manual, seed: 17, ticks: 2}
+providers:
+  scripted:
+    kind: mock
+    decisions:
+      alice:
+        - {kind: contribute, parameters: {amount: 1}}
+        - {kind: say, parameters: {text: "I can contribute again if needed."}}
+      bob:
+        - {kind: harvest, parameters: {amount: 1}}
+        - {kind: say, parameters: {text: "I prefer a direct exchange."}}
+models:
+  shared: {provider_ref: scripted, model: fixed-decisions}
+profiles:
+  alice:
+    identity: {display_name: Alice, description: Cooperative manager}
+    personality: {description: "Patient, candid, and community-minded"}
+    goals: [Keep the commons productive, Maintain a stable household income]
+    beliefs: [Reciprocal contributions build durable trust]
+    values: [Fairness, Stewardship]
+    communication_preferences: {style: concise and constructive}
+    behavioral_traits: {generosity: 0.85, patience: 0.9, fairness: 0.95}
+    economics: {money: 90, recurring_income: 8, occupation: cooperative manager}
+    social_status: {label: established, standing: 0.75}
+    reputation: {score: 0.85, labels: [reliable]}
+    relationships: {bob: {kind: trading partner, strength: 0.6}}
+    visibility:
+      wealth: public
+      occupation: public
+      status: public
+      reputation: public
+      relationships: public
+    private_information: [Needs the extra income to repay a private debt]
+  bob:
+    identity: {display_name: Bob, description: Independent trader}
+    personality: {description: "Competitive, direct, and impatient"}
+    goals: [Increase personal reserves, Win favorable exchanges]
+    beliefs: [Visible outcomes matter more than promises]
+    values: [Independence, Achievement]
+    communication_preferences: {style: direct and probing}
+    behavioral_traits: {greed: 0.8, competitiveness: 0.9, impulsiveness: 0.7}
+    economics: {money: 12, recurring_income: 2, occupation: trader}
+    social_status: {label: newcomer, standing: 0.3}
+    reputation: {score: 0.35, labels: [opportunistic]}
+    relationships: {alice: {kind: trading partner, strength: 0.45}}
+    visibility: {occupation: public, status: public, reputation: public}
+agents:
+  - {id: alice, model_ref: shared, profile_ref: alice}
+  - {id: bob, model_ref: shared, profile_ref: bob}
+actions: [{kind: harvest}, {kind: contribute}, {kind: say}]
+environment:
+  kind: commons
+  initial_resource: 8
+  initial_endowment: 2
+  initial_holdings: {alice: 5, bob: 1}
+  social: {message_max_length: 200, history_limit: 10, roster_limit: 10}
+memory: {kind: in_memory, recall_limit: 8, retention_limit: 16}
+scheduling: {kind: stable, interval: 1}
+storage: {kind: memory}

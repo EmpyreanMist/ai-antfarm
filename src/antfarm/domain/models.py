@@ -194,6 +194,42 @@ class SocialStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class Reputation:
+    """Static reputation facts; evolution belongs to a later milestone."""
+
+    score: float | None = None
+    labels: Sequence[str] = ()
+
+    def __post_init__(self) -> None:
+        labels = _validated_statements("reputation labels", self.labels)
+        if self.score is not None and (
+            isinstance(self.score, bool) or not 0 <= self.score <= 1
+        ):
+            raise ValueError("agent profile reputation score must be between 0 and 1")
+        if self.score is None and not labels:
+            raise ValueError("agent profile reputation must not be empty")
+        object.__setattr__(self, "labels", labels)
+
+
+@dataclass(frozen=True, slots=True)
+class Relationship:
+    """One static, directed relationship from the profiled agent."""
+
+    kind: str
+    strength: float | None = None
+
+    def __post_init__(self) -> None:
+        if not self.kind.strip():
+            raise ValueError("agent profile relationship kind must not be empty")
+        if self.strength is not None and (
+            isinstance(self.strength, bool) or not 0 <= self.strength <= 1
+        ):
+            raise ValueError(
+                "agent profile relationship strength must be between 0 and 1"
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class EconomicSituation:
     """An agent's configured economic facts, distinct from mutable world state."""
 
@@ -252,10 +288,21 @@ class PublicAgentProfile:
 
     economics: EconomicSituation | None = None
     social_status: SocialStatus | None = None
+    reputation: Reputation | None = None
+    relationships: Mapping[AgentId, Relationship] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
     def __post_init__(self) -> None:
-        if self.economics is None and self.social_status is None:
+        relationships = MappingProxyType(dict(self.relationships))
+        if (
+            self.economics is None
+            and self.social_status is None
+            and self.reputation is None
+            and not relationships
+        ):
             raise ValueError("public agent profile must not be empty")
+        object.__setattr__(self, "relationships", relationships)
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,12 +328,19 @@ class AgentProfile:
     communication: CommunicationPreferences | None = None
     traits: BehavioralTraits | None = None
     social_status: SocialStatus | None = None
+    reputation: Reputation | None = None
+    relationships: Mapping[AgentId, Relationship] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     economics: EconomicSituation | None = None
     private_information: PrivateInformation | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "relationships", MappingProxyType(dict(self.relationships))
+        )
         if not any(
-            getattr(self, field_name) is not None
+            bool(getattr(self, field_name))
             for field_name in self.__dataclass_fields__
         ):
             raise ValueError("agent profile must contain at least one section")
@@ -438,6 +492,21 @@ class CognitionOutcome:
 class RunMetadata:
     run_id: RunId
     seed: int
+    runtime_overrides: JsonObject = field(default_factory=lambda: MappingProxyType({}))
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "runtime_overrides", freeze_object(self.runtime_overrides)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class StoredRun:
+    metadata: RunMetadata
+    scenario: JsonObject
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "scenario", freeze_object(self.scenario))
 
 
 @dataclass(frozen=True, slots=True)

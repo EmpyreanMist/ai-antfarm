@@ -40,6 +40,8 @@ from antfarm.domain.models import (
     ProfilePersonality,
     ProfileValues,
     PublicAgentProfile,
+    Relationship,
+    Reputation,
     RunId,
     RunMetadata,
     SocialStatus,
@@ -143,15 +145,41 @@ def _public_profile(config: AgentProfileConfig) -> PublicAgentProfile | None:
             roles=config.social_status.roles,
             standing=config.social_status.standing,
         )
-    if economics is None and social_status is None:
+    reputation = None
+    if config.visibility.reputation == "public" and config.reputation is not None:
+        reputation = Reputation(
+            score=config.reputation.score,
+            labels=config.reputation.labels,
+        )
+    relationships = {}
+    if config.visibility.relationships == "public":
+        relationships = {
+            AgentId(agent_id): Relationship(
+                kind=relationship.kind,
+                strength=relationship.strength,
+            )
+            for agent_id, relationship in config.relationships.items()
+        }
+    if (
+        economics is None
+        and social_status is None
+        and reputation is None
+        and not relationships
+    ):
         return None
-    return PublicAgentProfile(economics=economics, social_status=social_status)
+    return PublicAgentProfile(
+        economics=economics,
+        social_status=social_status,
+        reputation=reputation,
+        relationships=relationships,
+    )
 
 
 def compose(
     config: ScenarioConfig,
     *,
     on_cognition_started: Callable[[Tick, AgentId, str], None] | None = None,
+    runtime_overrides: JsonObject | None = None,
 ) -> ComposedSimulation:
     """Compose only the M0.1 runtime kinds; later kinds fail explicitly."""
 
@@ -298,6 +326,21 @@ def compose(
                     if profile_config.social_status is not None
                     else None
                 ),
+                reputation=(
+                    Reputation(
+                        score=profile_config.reputation.score,
+                        labels=profile_config.reputation.labels,
+                    )
+                    if profile_config.reputation is not None
+                    else None
+                ),
+                relationships={
+                    AgentId(other_id): Relationship(
+                        kind=relationship.kind,
+                        strength=relationship.strength,
+                    )
+                    for other_id, relationship in profile_config.relationships.items()
+                },
                 economics=(
                     EconomicSituation(
                         money=profile_config.economics.money,
@@ -330,7 +373,11 @@ def compose(
         storage = InMemoryStorage()
     run_id = RunId(config.run.id)
     storage.create_run(
-        RunMetadata(run_id=run_id, seed=config.run.seed),
+        RunMetadata(
+            run_id=run_id,
+            seed=config.run.seed,
+            runtime_overrides=runtime_overrides or {},
+        ),
         config.normalized_data(),
     )
     event_bus = InMemoryEventBus(

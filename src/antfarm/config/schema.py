@@ -141,6 +141,22 @@ class SocialStatusConfig(StrictModel):
         return self
 
 
+class ReputationConfig(StrictModel):
+    score: TraitScore | None = None
+    labels: tuple[ProfileText, ...] = ()
+
+    @model_validator(mode="after")
+    def is_not_empty(self) -> Self:
+        if self.score is None and not self.labels:
+            raise ValueError("reputation must not be empty")
+        return self
+
+
+class RelationshipConfig(StrictModel):
+    kind: ProfileText
+    strength: TraitScore | None = None
+
+
 class EconomicSituationConfig(StrictModel):
     money: NonNegativeInt | None = None
     resources: dict[Identifier, NonNegativeInt] = Field(default_factory=dict)
@@ -179,6 +195,8 @@ class AgentProfileConfig(StrictModel):
     communication_preferences: CommunicationPreferencesConfig | None = None
     behavioral_traits: BehavioralTraitsConfig | None = None
     social_status: SocialStatusConfig | None = None
+    reputation: ReputationConfig | None = None
+    relationships: dict[Identifier, RelationshipConfig] = Field(default_factory=dict)
     economics: EconomicSituationConfig | None = None
     visibility: InformationVisibilityConfig = Field(
         default_factory=InformationVisibilityConfig
@@ -187,10 +205,10 @@ class AgentProfileConfig(StrictModel):
 
     @model_validator(mode="after")
     def sections_are_not_empty(self) -> Self:
-        if not any(
-            getattr(self, name) is not None
+        if not self.relationships and not any(
+            bool(getattr(self, name))
             for name in type(self).model_fields
-            if name != "visibility"
+            if name not in {"visibility", "relationships"}
         ):
             raise ValueError("profile must contain at least one section")
         for name in ("goals", "beliefs", "values", "private_information"):
@@ -518,6 +536,18 @@ class ScenarioConfig(StrictModel):
                 "active agent count exceeds the configured population of "
                 f"{len(expanded_agents)}"
             )
+        expanded_agent_ids = {agent.id for agent in expanded_agents}
+        for profile_id, profile in self.profiles.items():
+            unknown_relationships = set(profile.relationships).difference(
+                expanded_agent_ids
+            )
+            if unknown_relationships:
+                names = ", ".join(sorted(unknown_relationships))
+                raise ValueError(
+                    f"profile {profile_id!r} relationships reference unknown "
+                    f"agents: {names}"
+                )
+
         for agent in expanded_agents:
             if agent.model_ref not in self.models:
                 raise ValueError(

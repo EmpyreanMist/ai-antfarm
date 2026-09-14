@@ -202,6 +202,25 @@ def _profile_context(profile: AgentProfile) -> dict[str, object]:
         if profile.social_status.standing is not None:
             status["standing"] = profile.social_status.standing
         context["social_status"] = status
+    if profile.reputation is not None:
+        reputation: dict[str, object] = {}
+        if profile.reputation.score is not None:
+            reputation["score"] = profile.reputation.score
+        if profile.reputation.labels:
+            reputation["labels"] = list(profile.reputation.labels)
+        context["reputation"] = reputation
+    if profile.relationships:
+        context["relationships"] = {
+            str(agent_id): {
+                "kind": relationship.kind,
+                **(
+                    {"strength": relationship.strength}
+                    if relationship.strength is not None
+                    else {}
+                ),
+            }
+            for agent_id, relationship in profile.relationships.items()
+        }
     if profile.economics is not None:
         economics: dict[str, object] = {}
         if profile.economics.money is not None:

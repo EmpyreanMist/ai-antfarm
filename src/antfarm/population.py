@@ -17,6 +17,7 @@ from antfarm.config.schema import (
     UniformNonNegativeIntRangeConfig,
     UniformTraitRangeConfig,
 )
+from antfarm.domain.json_values import JsonObject, freeze_object
 
 TemplateCategory = Literal[
     "goals",
@@ -48,6 +49,30 @@ class RuntimeOverrides:
     profiles: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
     model_assignments: Mapping[str, str] = field(default_factory=dict)
     model: str | None = None
+
+
+def runtime_overrides_data(overrides: RuntimeOverrides | None) -> JsonObject:
+    """Return durable, JSON-compatible provenance for explicit runtime choices."""
+
+    if overrides is None:
+        return freeze_object({})
+    data: dict[str, object] = {}
+    for name in ("seed", "run_id", "active_agents", "model"):
+        value = getattr(overrides, name)
+        if value is not None:
+            data[name] = value
+    if overrides.population is not None:
+        data["population"] = overrides.population.model_dump(
+            mode="json", exclude_none=True
+        )
+    if overrides.profiles:
+        data["profiles"] = {
+            agent_id: dict(profile)
+            for agent_id, profile in sorted(overrides.profiles.items())
+        }
+    if overrides.model_assignments:
+        data["model_assignments"] = dict(sorted(overrides.model_assignments.items()))
+    return freeze_object(data)
 
 
 def resolve_run_config(

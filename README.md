@@ -31,7 +31,7 @@ The foundation currently includes:
 - Quiet society-first output plus explicit `--verbose` lifecycle diagnostics
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, and M2-01 through M2-05 are complete. See
+M0, M1-01/M1-02, M2-01 through M2-05, and M3-01 through M3-04 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Quick Start
@@ -82,8 +82,62 @@ uv run antfarm run scenarios/examples/shared-model-mock.yaml
 It completes two ticks with six applied actions and finishes with resource `4`
 and holdings `alice=1`, `bob=0`, `charlie=1`.
 
-`inspect` prints the canonical scenario JSON, including deterministically expanded
-agents, without composing providers or starting a run.
+`inspect` resolves the population and prints the effective generation seed plus
+each resolved agent's complete configuration and explicitly public projection. It
+does not compose providers, create a database, or start a run.
+
+## Rich Profiles and Population Resolution
+
+Three offline examples cover the supported authoring modes:
+
+```console
+uv run antfarm inspect scenarios/examples/society-manual.yaml
+uv run antfarm inspect scenarios/examples/society-randomized.yaml
+uv run antfarm inspect scenarios/examples/society-mixed.yaml
+```
+
+`society-manual.yaml` is fully authored and deterministic. Its two agents contrast
+patient, generous cooperation with competitive, impulsive self-interest, as well
+as money, income, occupation, status, reputation, and directed relationships.
+These are ordinary composable values, not built-in archetypes.
+
+`society-randomized.yaml` generates four agents from one local seed. Trait ranges
+are normalized numbers from `0` to `1`; economic ranges are inclusive,
+non-negative integers. `mode: all` applies the default range to every behavioral
+trait. `mode: selected` generates only named traits. `society-mixed.yaml` combines
+an authored manager with a generated worker: generated defaults are applied first
+and explicit profile values win field by field.
+
+Profiles can independently configure identity, personality, goals, beliefs,
+values, communication preferences, behavioral traits, social status, economics,
+reputation, relationships, visibility, and private information. Money, recurring
+income, resources, and occupation are initial descriptive facts; they do not add
+income accrual or market rules. Reputation and relationships are also static in
+this milestone. Visibility is private by default and separately controls wealth,
+possessions, occupation, status, reputation, and relationships.
+
+Runtime seed, population, per-agent profile, model-assignment, active-count, run-
+ID, and compatible live-model overrides are ephemeral: they never rewrite YAML.
+The shared application facade resolves and inspects them before a run:
+
+```python
+from antfarm.facade import AntFarmApplication
+from antfarm.population import RuntimeOverrides
+
+application = AntFarmApplication()
+source = application.load_scenario("scenarios/examples/society-mixed.yaml")
+resolved = application.resolve_population(source, RuntimeOverrides(seed=29))
+for agent in application.inspect_resolved_agents(resolved):
+    print(agent.agent_id, dict(agent.configuration), dict(agent.public))
+```
+
+Starting through `application.start_run(...)` returns a managed handle.
+`wait_run` and `stop_run` return the last atomic snapshot; `read_run`,
+`read_agents`, `read_snapshot`, and `read_events` expose durable data without CLI
+or HTTP types. To query a historical SQLite run after restart, construct the
+facade with an open `SQLiteStorage`. The stored resolved configuration and
+runtime-override provenance are used, so changing the source scenario cannot
+regenerate or alter historical agents.
 
 The finite social mock example adds validated `say` actions while staying fully
 offline:

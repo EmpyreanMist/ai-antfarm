@@ -1,0 +1,38 @@
+schema_version: 1
+run: {id: society-mixed, seed: 23, ticks: 1}
+providers: {scripted: {kind: mock}}
+models: {shared: {provider_ref: scripted, model: no-op}}
+profiles:
+  manager:
+    identity: {display_name: Alice, description: Cooperative manager}
+    personality: {description: Patient and community-minded}
+    goals: [Keep the commons productive]
+    beliefs: [Long-term cooperation protects livelihoods]
+    communication_preferences: {style: constructive}
+    behavioral_traits: {generosity: 0.9, patience: 0.9, fairness: 0.95}
+    economics: {money: 90, recurring_income: 8, occupation: cooperative manager}
+    visibility: {wealth: public, occupation: public}
+    private_information: [Needs the extra income to repay a private debt]
+agents: [{id: alice, model_ref: shared, profile_ref: manager}]
+population:
+  mode: mixed
+  seed: 29
+  generated: {id_prefix: worker, count: 1, model_ref: shared}
+  randomize:
+    behavioral_traits:
+      mode: selected
+      selfishness: {minimum: 0.6, maximum: 0.9}
+      competitiveness: {minimum: 0.6, maximum: 0.95}
+      risk_tolerance: {minimum: 0.4, maximum: 0.9}
+    economics:
+      money: {minimum: 5, maximum: 20}
+      recurring_income: {minimum: 1, maximum: 3}
+actions: [{kind: harvest}, {kind: contribute}]
+environment:
+  kind: commons
+  initial_resource: 8
+  initial_endowment: 2
+  initial_holdings: {alice: 5, worker-001: 1}
+memory: {kind: in_memory, recall_limit: 5, retention_limit: 10}
+scheduling: {kind: stable, interval: 1}
+storage: {kind: memory}

@@ -113,6 +113,11 @@ seed overrides before composition or durable run creation.
 
 ### M3-04: Inspection, Persistence, and Acceptance
 
+**Status: Complete.** Implemented with transport-neutral application inspection,
+managed run lifecycle and queries, durable resolved configurations and runtime-
+override provenance, static relationship/reputation values, and three offline
+society examples.
+
 - Expose resolved agents and their inspectable public/configuration fields before
   a run starts through application services used by the CLI and tests.
 - Establish a small application facade for loading a scenario, resolving a

@@ -15,6 +15,7 @@ from antfarm.adapters.terminal import TerminalOutputError
 from antfarm.config import load_scenario
 from antfarm.config.schema import M2_MAX_ACTIVE_AGENTS
 from antfarm.domain.json_values import thaw_json
+from antfarm.facade import AntFarmApplication
 from antfarm.runner import run_continuous_scenario, run_live_scenario, run_scenario
 
 
@@ -67,8 +68,38 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"valid scenario: {config.run.id}")
             return 0
         if args.command == "inspect":
-            config = load_scenario(args.scenario)
-            print(config.normalized_json())
+            application = AntFarmApplication()
+            resolved = application.resolve_population(
+                application.load_scenario(args.scenario)
+            )
+            agents = application.inspect_resolved_agents(resolved)
+            output = resolved.config.normalized_data()
+            output["generation_seed"] = resolved.config.run.seed
+            expanded_agents = output["expanded_agents"]
+            if not isinstance(expanded_agents, list):
+                raise TypeError("normalized expanded agents must be a list")
+            inspections = {agent.agent_id: agent for agent in agents}
+            for expanded in expanded_agents:
+                if not isinstance(expanded, dict):
+                    raise TypeError("normalized agent must be an object")
+                agent_id = expanded.get("id")
+                inspection = (
+                    inspections.get(agent_id) if isinstance(agent_id, str) else None
+                )
+                if inspection is None:
+                    continue
+                profile = inspection.configuration.get("profile")
+                if profile is not None:
+                    expanded["profile"] = thaw_json(profile)
+                expanded["public"] = thaw_json(inspection.public)
+                expanded["resolved_model"] = inspection.model
+            print(
+                json.dumps(
+                    output,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
             return 0
         if args.live and not args.continuous:
             raise ValueError("--live requires --continuous")

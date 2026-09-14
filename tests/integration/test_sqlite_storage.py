@@ -93,3 +93,53 @@ def test_non_monotonic_event_batch_is_rejected(tmp_path: Path) -> None:
 
         assert tuple(storage.read_events(run_id)) == ()
         assert storage.load_latest(run_id) is None
+
+
+def test_run_record_preserves_resolved_scenario_and_runtime_overrides(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "inspection.db"
+    run_id = RunId("inspectable-run")
+    scenario = {
+        "schema_version": 1,
+        "run": {"id": str(run_id), "seed": 23},
+        "profiles": {"resolved-alice": {"economics": {"money": 77}}},
+    }
+    metadata = RunMetadata(
+        run_id=run_id,
+        seed=23,
+        runtime_overrides={"seed": 23, "model": "local-model"},
+    )
+
+    with SQLiteStorage(database) as storage:
+        storage.create_run(metadata, scenario)
+
+    with SQLiteStorage(database) as reopened:
+        stored = reopened.read_run(run_id)
+
+    assert stored is not None
+    assert stored.metadata == metadata
+    assert stored.scenario == scenario
+
+
+def test_existing_database_is_migrated_for_runtime_override_provenance(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "legacy.db"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE runs (run_id TEXT PRIMARY KEY, seed INTEGER NOT NULL, "
+        "scenario_json TEXT NOT NULL)"
+    )
+    connection.execute(
+        "INSERT INTO runs VALUES (?, ?, ?)",
+        ("legacy-run", 7, '{"schema_version":1}'),
+    )
+    connection.commit()
+    connection.close()
+
+    with SQLiteStorage(database) as storage:
+        stored = storage.read_run(RunId("legacy-run"))
+
+    assert stored is not None
+    assert stored.metadata.runtime_overrides == {}
