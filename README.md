@@ -36,10 +36,64 @@ The foundation currently includes:
 - Quiet society-first output plus explicit `--verbose` lifecycle diagnostics
 - Stable transport-neutral run lifecycle, inspection, query, error, pagination,
   and committed-event subscription contracts
+- A versioned local HTTP/WebSocket API over those application contracts
+- A Next.js Society control plane for preview, live events, stop, and inspection
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4 are complete. See
+M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, M4, and M5 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
+
+## Web Control Plane
+
+M5 provides a local, trusted-operator web experience over the same application
+behavior used by the CLI. Start the API from the repository root:
+
+```console
+uv sync --dev
+uv run antfarm serve --reload
+```
+
+In a second terminal, install and start the web workspace:
+
+```console
+cd web
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`. The default **Live Society · Mock** scenario needs
+no model runtime: select it, adjust the seed or active-agent count, choose
+**Resolve & preview agents**, then start a bounded or continuous run. Committed
+speech/actions and the latest atomic world snapshot appear in the browser. Use
+**Stop safely** to end a continuous run.
+
+The **Live Society · Ollama** entry uses the configured local model. Start Ollama
+and install the scenario's model before launching it:
+
+```console
+ollama serve
+ollama pull qwen3.5:0.8b
+```
+
+The server checks the active Ollama assignments before creating the run. API
+health is available at `http://127.0.0.1:8000/health`, and interactive API
+documentation is at `http://127.0.0.1:8000/docs`. To point the browser at another
+API origin, copy `web/.env.example` to `web/.env.local` and change
+`NEXT_PUBLIC_ANTFARM_API_URL` before starting or building Next.js.
+
+The M5 server deliberately assumes one local trusted operator. Running tasks and
+live subscriptions are process-local; restarting the API does not resume task
+ownership. SQLite scenarios retain their committed checkpoints and event audit,
+but cross-restart run discovery/resume and multi-process coordination remain
+future work.
+
+The repeatable offline browser acceptance test starts both servers automatically
+and uses an installed Google Chrome. CI installs and uses its own Chromium:
+
+```console
+cd web
+npm run test:e2e
+```
 
 ## Quick Start
 

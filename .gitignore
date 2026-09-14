@@ -5,3 +5,9 @@ __pycache__/
 .ruff_cache/
 *.py[cod]
 *.db
+web/.next/
+web/node_modules/
+web/*.tsbuildinfo
+web/blob-report/
+web/playwright-report/
+web/test-results/

@@ -121,14 +121,18 @@ This interactive terminal society is the first major product experience beyond
 the deterministic foundation and supplies the working capability for the first
 built-in Society mode.
 
-## Next Product Target
+## First Web Product Target
 
-The next experience is a minimum end-to-end web control plane over the completed
+The first web experience is a minimum end-to-end control plane over the completed
 Society and M4 application-service contracts. A user should be able to select a
 Society scenario, set supported runtime options, preview resolved agents, start a
 run, watch committed events live, inspect agents and state, stop the run, and
 inspect its durable result. This vertical slice precedes the final generic custom
 simulation builder so the browser path can be tested and improved early.
+
+This minimum Society path is implemented in M5. The next product target is the
+small Game Mode architecture that makes Society the first explicit built-in mode
+without prematurely designing every possible mode.
 
 ## Long-Term Direction
 

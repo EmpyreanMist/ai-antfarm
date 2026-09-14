@@ -11,13 +11,14 @@ from antfarm.adapters.terminal import LiveTerminalObserver, checkpoint_location
 from antfarm.application.continuous import PacingClock
 from antfarm.application.contracts import RunSummary as RunSummary
 from antfarm.config import load_scenario
-from antfarm.config.schema import OpenAICompatibleProviderConfig, ScenarioConfig
+from antfarm.config.schema import ScenarioConfig
 from antfarm.domain.models import AgentId, Event, Tick
 from antfarm.facade import AntFarmApplication, event_view
 from antfarm.population import (
     RuntimeOverrides,
     resolve_run_config,
 )
+from antfarm.preflight import preflight_ollama
 
 
 async def run_scenario(path: str | Path) -> RunSummary:
@@ -102,7 +103,7 @@ async def run_live_scenario(
     config = prepare_live_config(
         path, active_agents=active_agents, model=model, run_id=run_id
     )
-    await _preflight_ollama(config)
+    await preflight_ollama(config, checker_factory=OllamaModelPreflight)
     terminal = LiveTerminalObserver(output, verbose=verbose)
 
     def cognition_started(tick: Tick, agent_id: AgentId, model_ref: str) -> None:
@@ -176,22 +177,3 @@ async def run_live_scenario(
 def _fresh_run_id(base: str) -> str:
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
     return f"{base}-{timestamp}-{uuid4().hex[:8]}"
-
-
-async def _preflight_ollama(config: ScenarioConfig) -> None:
-    grouped: dict[str, set[str]] = {}
-    for agent in config.active_agents():
-        model = config.models[agent.model_ref]
-        provider = config.providers[model.provider_ref]
-        if (
-            isinstance(provider, OpenAICompatibleProviderConfig)
-            and provider.runtime == "ollama"
-        ):
-            grouped.setdefault(model.provider_ref, set()).add(model.model)
-    for provider_ref in sorted(grouped):
-        provider = config.providers[provider_ref]
-        if not isinstance(provider, OpenAICompatibleProviderConfig):
-            raise TypeError("Ollama preflight requires an OpenAI-compatible provider")
-        await OllamaModelPreflight(base_url=provider.base_url).ensure_available(
-            sorted(grouped[provider_ref])
-        )

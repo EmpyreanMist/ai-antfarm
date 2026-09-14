@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This is the active plan from the completed M0-M4 baseline onward. The detailed
+This is the active plan from the completed M0-M5 baseline onward. The detailed
 M0-M2 implementation history is preserved unchanged in
 [`ROADMAP_old.md`](ROADMAP_old.md). Completed work is summarized here only where
 it establishes a dependency or constraint for future work.
@@ -188,6 +188,14 @@ objects from becoming accidental public transport contracts.
 
 ## M5: Minimum Web Control Plane
 
+**Status: Complete.** Implemented as a versioned FastAPI adapter, bounded
+committed-event WebSocket stream, server-owned Society scenario catalog, and
+Next.js control plane. The browser supports runtime configuration, resolved-agent
+preview, bounded and continuous starts, live activity, agent/world inspection,
+safe stop, and completed-run inspection over M4 services. The initial topology is
+an explicitly local, trusted-operator deployment; distributed ownership and the
+generic simulation builder remain deferred.
+
 **Outcome:** a user can complete the existing Society workflow in a browser: open
 AntFarm, choose an available Society scenario, configure supported runtime
 options, preview resolved agents, start a run, watch committed activity live,
@@ -246,19 +254,38 @@ logic into TypeScript.
 
 ## M6: Game Mode Architecture
 
-Introduce a small explicit contract for purpose-built simulation or game modes,
-with Society as the first built-in mode. A mode may supply or constrain its
-configuration/schema, scenario templates and defaults, applicable fields,
-actions/capabilities, validation, presentation metadata, and visualization hints.
-Keep engine ordering and environment-owned validation/mutation in the core; a mode
-describes and composes a coherent experience rather than becoming an alternate
-engine.
+**Outcome:** AntFarm has an explicit, transport-neutral representation for curated
+simulation/game modes, and the M5 Society experience is served through it without
+changing simulation results or making Society fields universal.
 
-Extract the smallest useful mode descriptor/registry from the working Society
-vertical slice. Avoid speculative hooks until a second concrete mode or reusable
-capability demonstrates them, and avoid dynamic plugin discovery and giant mode
-conditionals. Do not force Society concepts such as wealth, reputation,
-occupation, or relationships onto modes that do not use them.
+### M6 acceptance criteria
+
+- Define the smallest immutable mode descriptor and application query needed to
+  identify a mode, expose presentation metadata, enumerate its scenario templates,
+  and describe supported configuration/capability hints to clients.
+- Make Society the first built-in mode and route the existing catalog and web
+  selection experience through the shared mode query rather than hard-coded web or
+  HTTP-only metadata.
+- Keep the mode boundary transport-neutral. FastAPI serializes application views;
+  Next.js consumes them; neither owns the authoritative registry or validation.
+- Keep engine ordering, action validation, transitions, persistence, and event
+  publication unchanged. A mode selects and constrains composition; it is not an
+  alternate engine or a place for mutable run state.
+- Preserve schema-version-1 scenarios, CLI/library behavior, deterministic
+  resolution, stored-run compatibility, and the Society UI delivered in M5.
+- Distinguish mode metadata and applicable fields from universal core state.
+  Wealth, personality, relationships, reputation, occupation, speech, and a
+  commons environment remain Society capabilities rather than required mode
+  fields.
+- Keep registration closed and explicit. Do not add entry-point discovery,
+  arbitrary Python imports, third-party mode loading, or a broad hook interface.
+- Add focused offline tests proving Society discovery, template enumeration,
+  transport projection, unknown-mode errors, and unchanged resolution/run
+  behavior.
+
+**M6 non-goals:** implementing several speculative modes, generic custom
+definitions, dynamic plugins, rewriting M3/M4 values, or moving validation and
+mutation into the frontend.
 
 ## M7: Generic Custom Simulation Definition
 

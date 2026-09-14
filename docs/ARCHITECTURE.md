@@ -10,10 +10,10 @@ databases, HTTP clients, OASIS, CAMEL, provider SDKs, CLI code, or frontend code
 
 The current execution topology is one Python 3.12+ process per application
 service, with one simulation engine and storage writer per managed run. The public
-surface is an installable library plus a small CLI. The shared application/service
-contracts are stable. The next delivery step adds a minimum HTTP/WebSocket and
-Next.js vertical slice over those contracts. Distributed workers and dynamic
-plugin discovery remain deferred.
+surface is an installable library, CLI, local versioned HTTP/WebSocket API, and
+Next.js control plane. The web vertical slice invokes the stable application
+contracts directly and currently exposes the implemented Society experience.
+Distributed workers and dynamic plugin discovery remain deferred.
 
 ## Product Model and Evolution Boundary
 
@@ -85,16 +85,16 @@ The intended boundaries are:
 - **CLI:** parses terminal arguments, calls application services, and renders
   service results and committed events. It contains no alternative simulation
   workflow.
-- **HTTP/WebSocket API:** a transport adapter planned first as a minimum vertical
-  slice for application commands,
+- **HTTP/WebSocket API:** the implemented M5 transport adapter for application commands,
   queries, and committed-event streaming. HTTP handles bounded control/query
   operations; WebSockets carry live updates where required. Transport concerns
   such as authentication, serialization, and connection lifecycle remain outside
   the domain.
-- **Next.js frontend:** the planned primary presentation client for selecting
+- **Next.js frontend:** the primary presentation client for selecting
   modes/scenarios, configuring, inspecting, starting, stopping, and observing
-  simulations through the API. It begins with Society before the generic custom
-  builder exists. Frontend state is not authoritative simulation state.
+  simulations through the API. M5 implements the Society slice; the generic
+  custom builder remains planned. Frontend state is not authoritative simulation
+  state.
 
 ## Simulation Lifecycle
 
@@ -281,8 +281,8 @@ The currently implemented versioned `ScenarioConfig` contains:
 
 Provider secrets are never embedded in scenarios. Configuration refers to environment-variable names. Component kinds resolve through a closed registry in the composition root; scenario files cannot name arbitrary Python imports.
 
-This closed schema remains the supported contract for the first web vertical
-slice. A later generic custom simulation definition will be a shared
+This closed schema remains the supported contract for the implemented first web
+vertical slice. A later generic custom simulation definition will be a shared
 domain/application format usable by web, CLI, and library callers; it must not be
 owned by HTTP or React types. Mode schemas may provide defaults and tighter
 constraints, but both mode and custom authoring must resolve and validate on the
@@ -394,10 +394,10 @@ src/antfarm/
     models/        # Mock and OpenAI-compatible implementations
     memory/        # Initial in-memory implementation
     storage/       # SQLite implementation
-    api/           # Planned HTTP/WebSocket transport adapters
+    api/           # Versioned FastAPI and WebSocket transport adapter
   config/          # Strict schema, YAML loader, composition registry
   cli.py            # Thin application-service client and terminal renderer
-web/                # Planned Next.js control plane; API client only
+web/                # Next.js control plane; API client only
 scenarios/examples/
 tests/{unit,integration,fixtures}/
 docs/adr/

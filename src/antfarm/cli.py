@@ -1,4 +1,4 @@
-"""Minimal non-interactive AntFarm command line interface."""
+"""AntFarm command line interface and local web-server launcher."""
 
 import argparse
 import asyncio
@@ -57,6 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--model", type=_model_name)
     run.add_argument("--verbose", action="store_true")
     run.add_argument("--tick-seconds", type=_positive_float, default=1.0)
+    serve = commands.add_parser("serve")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--reload", action="store_true")
     return parser
 
 
@@ -99,6 +103,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                     sort_keys=True,
                     separators=(",", ":"),
                 )
+            )
+            return 0
+        if args.command == "serve":
+            if not 1 <= args.port <= 65535:
+                raise ValueError("--port must be between 1 and 65535")
+            import uvicorn
+
+            uvicorn.run(
+                "antfarm.adapters.api:create_app",
+                factory=True,
+                host=args.host,
+                port=args.port,
+                reload=args.reload,
             )
             return 0
         if args.live and not args.continuous:

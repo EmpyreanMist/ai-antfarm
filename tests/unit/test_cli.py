@@ -1,4 +1,5 @@
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -182,3 +183,24 @@ def test_runtime_model_cli_value_rejects_whitespace(
         )
 
     assert "non-empty trimmed value" in capsys.readouterr().err
+
+
+def test_serve_launches_versioned_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def run(target: str, **options: object) -> None:
+        captured["target"] = target
+        captured.update(options)
+
+    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=run))
+
+    result = cli.main(["serve", "--host", "0.0.0.0", "--port", "8123"])
+
+    assert result == 0
+    assert captured == {
+        "target": "antfarm.adapters.api:create_app",
+        "factory": True,
+        "host": "0.0.0.0",
+        "port": 8123,
+        "reload": False,
+    }
