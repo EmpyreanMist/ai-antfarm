@@ -2,8 +2,8 @@
 
 ## Purpose
 
-This is the active plan from the completed terminal-society baseline onward. The
-detailed M0-M2 implementation history is preserved unchanged in
+This is the active plan from the completed M0-M4 baseline onward. The detailed
+M0-M2 implementation history is preserved unchanged in
 [`ROADMAP_old.md`](ROADMAP_old.md). Completed work is summarized here only where
 it establishes a dependency or constraint for future work.
 
@@ -23,10 +23,12 @@ preceding contracts are implemented and tested.
   safe cancellation, live committed-event rendering, runtime model selection, and
   Ollama preflight.
 
-The current system can run several local-model agents that act and talk in a
-shared society. The next constraint is behavioral sameness: profiles, incentives,
-economic differences, visibility, and population generation are not yet rich
-enough to sustain meaningfully distinct behavior.
+The current system can resolve, inspect, run, stop, and query several distinct
+local-model agents acting and talking in a shared society. M3 added rich profiles,
+economic differences, visibility, and deterministic population generation; M4
+made those workflows available through stable transport-neutral service
+contracts. Society is the first substantial simulation experience, not the
+mandatory object model for every future AntFarm simulation.
 
 ## M3: Rich Agents, Economy, and Randomized Societies
 
@@ -184,39 +186,153 @@ objects from becoming accidental public transport contracts.
   subscriptions, SQLite parity, CLI compatibility, and live output behavior with
   offline automated tests.
 
-## M5: HTTP and WebSocket Control API
+## M5: Minimum Web Control Plane
 
-Add a versioned HTTP adapter for scenario/configuration workflows, population
-inspection, run lifecycle commands, snapshots, agents, events, and metrics. Add
-WebSocket delivery for committed live events and lifecycle updates where polling
-is insufficient. The API calls M4 services directly; it never spawns the CLI or
-parses terminal output. Address authentication, cancellation, backpressure,
-reconnection, and bounded history before calling the transport stable.
+**Outcome:** a user can complete the existing Society workflow in a browser: open
+AntFarm, choose an available Society scenario, configure supported runtime
+options, preview resolved agents, start a run, watch committed activity live,
+inspect basic state, stop the run, and inspect its durable result. This is a real
+end-to-end vertical slice over M4, not a mock interface or the final custom
+simulation editor.
 
-## M6: Next.js Control Plane
+Build the smallest versioned HTTP/WebSocket adapter and Next.js client that prove
+this path together. Do not split transport and frontend into separate milestones
+if that postpones a usable browser experience. Scope the first release to the
+implemented Society scenarios and M3/M4 configuration surface; do not generalize
+all simulation concepts first.
 
-Build a Next.js client over the HTTP/WebSocket API. The first slice should load a
-scenario, adjust runtime population/profile/model/seed settings, generate and
-inspect resolved agents, start or stop a run, and watch committed activity. The
-server remains authoritative; the frontend neither embeds simulation logic nor
-reads SQLite directly. Rich editors and visual polish follow a complete basic
-control flow.
+### M5 acceptance criteria
 
-## M7: Visualization, Replay, and Experiment Analysis
+- Provide a small server-owned catalog of supported example scenarios and their
+  presentation metadata. The browser can list and select them without receiving
+  arbitrary filesystem access.
+- Map versioned HTTP commands and queries onto `AntFarmApplication` for scenario
+  loading, population resolution, resolved-agent inspection, run start/stop,
+  lifecycle state, latest snapshot, ordered event pages, and completed-run
+  inspection. Preserve M4 error codes and bounded pagination rather than exposing
+  engine, domain, persistence, or provider objects as wire contracts.
+- Let the Society form edit the important runtime choices already supported by
+  M3/M4: run mode, tick pacing where applicable, active population, seed, model
+  selection/assignment, and supported profile overrides. Validate and resolve on
+  the server, then show the resulting agents before a run is created.
+- Stream committed event views and lifecycle changes to the browser through a
+  WebSocket adapter justified by the M4 subscription boundary. Define bounded
+  per-connection buffering and a sequence cursor/reconnect path that recovers gaps
+  through durable event queries. Slow or disconnected clients must not block,
+  mutate, or roll back the simulation.
+- Provide modest but usable Next.js screens for scenario selection, configuration
+  and preview, active-run control, a live activity feed, basic agent/snapshot
+  inspection, and completed-run inspection. The UI need not include a generic
+  schema editor, node editor, replay engine, or polished visualization system.
+- Keep the server authoritative. The frontend must not call the CLI, parse
+  terminal output, read SQLite, apply actions, implement scheduling, or derive
+  authoritative simulation state.
+- Keep CLI and library workflows compatible and routed through the same
+  application behavior. Scenario resolution must remain deterministic and
+  non-LLM-dependent, and the exact resolved configuration must remain durable.
+- Establish only the deployment, origin, authentication, and run-ownership
+  assumptions required for the first supported local web topology. Document
+  limitations explicitly; distributed workers and multi-node ownership remain
+  out of scope.
+- Cover the API mappings, serialization, lifecycle/error mapping, reconnect/gap
+  recovery, slow-subscriber policy, and the browser's critical start-live-stop-
+  inspect flow with offline automated tests. Real Ollama and interactive browser
+  acceptance remain user-run unless explicitly requested.
+
+**M5 non-goals:** generic custom simulation authoring, arbitrary YAML editing in
+the browser, dynamic mode/plugin discovery, a general visualization engine,
+replay, run comparison, production multi-tenant hosting, or moving simulation
+logic into TypeScript.
+
+## M6: Game Mode Architecture
+
+Introduce a small explicit contract for purpose-built simulation or game modes,
+with Society as the first built-in mode. A mode may supply or constrain its
+configuration/schema, scenario templates and defaults, applicable fields,
+actions/capabilities, validation, presentation metadata, and visualization hints.
+Keep engine ordering and environment-owned validation/mutation in the core; a mode
+describes and composes a coherent experience rather than becoming an alternate
+engine.
+
+Extract the smallest useful mode descriptor/registry from the working Society
+vertical slice. Avoid speculative hooks until a second concrete mode or reusable
+capability demonstrates them, and avoid dynamic plugin discovery and giant mode
+conditionals. Do not force Society concepts such as wealth, reputation,
+occupation, or relationships onto modes that do not use them.
+
+## M7: Generic Custom Simulation Definition
+
+Define a versioned, transport-independent representation for simulations that do
+not fit a built-in mode. Generalize only the domain/application seams required to
+represent typed state values, scope and ownership, visibility, actions,
+observations, validation constraints, scheduling/activation, termination, and
+environment-owned transitions. A valid custom simulation need not contain money,
+relationships, society, a physical environment, or an LLM-backed entity.
+
+Retain the M3 rich profile, population, economic, visibility, and social behavior
+as working capability. Move or adapt those concepts toward reusable schemas,
+capabilities, or the Society mode where evidence supports it; do not replace the
+engine, persistence lifecycle, application facade, or resolved-configuration
+model wholesale. Custom definitions remain data, not arbitrary imported or
+generated server code, and loading/resolution must not require an LLM.
+
+## M8: Web Custom Simulation Builder
+
+Expose the M7 definition through structured browser forms/editors. Users can
+define and edit entities and types, state, actions, observations, visibility,
+rules/constraints, model assignments, activation, and termination without writing
+YAML. Provide server-backed validation, clear errors, and resolved previews before
+execution. The same definition remains usable through non-web application/library
+entry points. A visual node editor is not required for the first builder.
+
+## M9: AI-Assisted Simulation Generation
+
+Translate a natural-language simulation description into a proposed structured
+M7 definition. Always show the validated proposal in the M8 builder and keep it
+editable before execution. Treat generation as configuration/schema generation:
+the model may not create, import, or execute arbitrary server code, bypass
+visibility, or bypass environment/domain-owned transition validation.
+
+## M10: Visualization, Replay, and Experiment Analysis
 
 Implement recorded-action replay without model calls and stable comparison of
 completed runs, restoring the deferred M1-03/M1-04 outcomes on top of mature run
-queries. Add time-series metrics, society/economic visualizations, replay views,
-and experiment comparison incrementally. Statistical analysis and large-scale
-experiment scheduling require separate evidence and design.
+queries. Evolve the web experience with timelines, state changes, conversations,
+agent inspectors, current world state, replay, and run comparison. Allow modes to
+provide relevant views such as relationship networks or economic charts without
+making a universal visualization system a prerequisite. Add time-series metrics,
+statistical analysis, and large-scale experiment scheduling incrementally when
+their requirements are demonstrated.
 
-## M8: Deeper Social Systems and Environments
+## M11: Optional Advanced Simulation Systems
 
 Advance relationships, reputation, groups, institutions, occupations, markets,
-governance, and richer environments after profile visibility and replay make
-their effects observable and testable. Add one validated domain need at a time;
-do not hard-code an exhaustive social ontology or let new systems bypass
-environment-owned mutation.
+governance, survival systems, and richer environments as optional reusable
+capabilities and/or mode-owned functionality. Add one validated need at a time;
+none of these concepts becomes mandatory in the AntFarm object model, and no
+system may bypass environment/domain-owned validation and mutation.
+
+## Transition Constraints and Risks
+
+- `ScenarioConfig` currently requires agents, providers/models, one environment,
+  memory, scheduling, storage, and a closed union of built-in actions. That is an
+  accurate version-1 contract, but not yet the generic custom definition promised
+  by M7.
+- Schema validation, the composition root, resolved-agent inspection, and some
+  observation/profile projection contain explicit counter/commons and
+  social/economic branches. M6/M7 should migrate these seams incrementally rather
+  than growing cross-engine mode conditionals or rewriting known-good M3/M4 code.
+- M4 live subscriptions are process-local and expose committed events only;
+  durable cursor queries provide recovery. M5 must make backpressure,
+  reconnection, application lifetime, and run ownership explicit before treating
+  WebSockets as reliable transport.
+- `AntFarmApplication` owns running tasks in memory while SQLite owns durable run
+  data. Restart/resume and multi-process ownership are not implied by the current
+  service contract and should not be accidentally promised by the first web UI.
+- Version-1 resolved-agent inspection intentionally includes complete
+  configuration for the configuring caller and a separate public projection.
+  Future API authorization must preserve that distinction rather than assuming
+  every inspection field is safe for every viewer.
 
 ## Delivery Workflow
 

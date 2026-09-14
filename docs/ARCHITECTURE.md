@@ -11,17 +11,51 @@ databases, HTTP clients, OASIS, CAMEL, provider SDKs, CLI code, or frontend code
 The current execution topology is one Python 3.12+ process per application
 service, with one simulation engine and storage writer per managed run. The public
 surface is an installable library plus a small CLI. The shared application/service
-contracts are stable; HTTP, WebSockets, and the Next.js frontend follow in later
-milestones. Distributed workers and dynamic plugin discovery remain deferred.
+contracts are stable. The next delivery step adds a minimum HTTP/WebSocket and
+Next.js vertical slice over those contracts. Distributed workers and dynamic
+plugin discovery remain deferred.
+
+## Product Model and Evolution Boundary
+
+AntFarm is evolving from its first artificial-society experience into a general,
+web-first simulation platform with two complementary authoring paths:
+
+- **Game/simulation modes** are curated experiences with coherent configuration,
+  defaults, rules, capabilities, validation, presentation metadata, and optional
+  visualization hints. The implemented social commons and rich-agent workflow
+  will become the first built-in **Society** mode. Future modes may address other
+  domains without making Society fields universal.
+- **Custom simulation definitions** are validated, versioned data that describe a
+  simulation outside a built-in mode. They will eventually express entities and
+  types, typed state, ownership/scope, visibility, actions, observations,
+  constraints, scheduling, termination, and environment-owned transitions. They
+  are not arbitrary executable Python or model-generated server code.
+
+These are authoring and composition concepts around one core lifecycle, not
+separate engines. Both paths ultimately produce validated inputs for the same
+application, engine, event, persistence, and query boundaries. A specialized mode
+may constrain or enrich the generic concepts and provide tailored UX; a custom
+definition exposes them directly. Money, wealth, occupation, reputation,
+relationships, groups, and even a physical environment are optional capabilities,
+not required AntFarm primitives.
+
+This section describes target direction. The implemented schema-version-1 model
+is still a closed configuration with required agents/models, one selected
+environment, fixed action families, scheduling, memory, and storage. Its rich
+profile, economy, visibility, and social fields are implemented Society
+capabilities to retain and migrate incrementally, not evidence that the generic
+custom-definition contract already exists.
 
 ## Target Application Topology
 
 ```text
-CLI -----------------+
-                     |
-Next.js -> HTTP/WebSocket API -> AntFarm application layer -> core/domain
-                     |
-Tests ---------------+
+CLI/library -------------------+
+                               |
+Next.js -> HTTP/WebSocket API -> AntFarm application layer
+                               |          |
+Tests -------------------------+     modes/custom definitions
+                                          |
+                                     engine/core
 ```
 
 The arrows represent calls toward shared behavior, not imports from the core into
@@ -35,6 +69,10 @@ The intended boundaries are:
 - **Domain/core simulation:** immutable agent and profile values, simulation time,
   environments, observations, validated actions, events, and rules. It owns no
   transport, persistence implementation, UI model, or provider wire format.
+- **Modes and custom definitions:** planned composition/configuration concepts
+  that select, constrain, or describe domain capabilities without taking engine
+  ownership. Society-specific profile and economic concepts can live here or in
+  reusable capabilities rather than becoming mandatory core fields.
 - **Application/service layer:** scenario loading and resolution, runtime override
   handling, population inspection, run lifecycle orchestration, queries, and
   transport-neutral result/event DTOs. It is the single entry point for equivalent
@@ -47,14 +85,16 @@ The intended boundaries are:
 - **CLI:** parses terminal arguments, calls application services, and renders
   service results and committed events. It contains no alternative simulation
   workflow.
-- **HTTP/WebSocket API:** a future transport adapter for application commands,
+- **HTTP/WebSocket API:** a transport adapter planned first as a minimum vertical
+  slice for application commands,
   queries, and committed-event streaming. HTTP handles bounded control/query
   operations; WebSockets carry live updates where required. Transport concerns
   such as authentication, serialization, and connection lifecycle remain outside
   the domain.
-- **Next.js frontend:** a future presentation client for configuring, inspecting,
-  starting, stopping, and observing societies through the API. Frontend state is
-  not authoritative simulation state.
+- **Next.js frontend:** the planned primary presentation client for selecting
+  modes/scenarios, configuring, inspecting, starting, stopping, and observing
+  simulations through the API. It begins with Society before the generic custom
+  builder exists. Frontend state is not authoritative simulation state.
 
 ## Simulation Lifecycle
 
@@ -227,7 +267,7 @@ An event envelope contains `schema_version`, `event_id`, `run_id`, monotonic `se
 
 Scenarios are authored as YAML 1.2, loaded without executable tags, and validated strictly before composition. Unknown fields, duplicate identifiers, invalid references, and unsupported component kinds are errors. A normalized JSON representation is stored with each run.
 
-The versioned `ScenarioConfig` contains:
+The currently implemented versioned `ScenarioConfig` contains:
 
 - A master seed, run limits, and engine settings
 - An optional validated active-agent prefix, bounded to 1–10 for M2-04
@@ -240,6 +280,14 @@ The versioned `ScenarioConfig` contains:
 - Simulation rules, built-in metric identifiers, observability policy, and storage settings
 
 Provider secrets are never embedded in scenarios. Configuration refers to environment-variable names. Component kinds resolve through a closed registry in the composition root; scenario files cannot name arbitrary Python imports.
+
+This closed schema remains the supported contract for the first web vertical
+slice. A later generic custom simulation definition will be a shared
+domain/application format usable by web, CLI, and library callers; it must not be
+owned by HTTP or React types. Mode schemas may provide defaults and tighter
+constraints, but both mode and custom authoring must resolve and validate on the
+server before run creation. No authoring path may bypass action validation,
+visibility boundaries, or environment/domain-owned mutation.
 
 A caller may derive a validated run configuration from a loaded scenario by
 applying ephemeral runtime choices such as a seed, population settings, profile
@@ -346,10 +394,10 @@ src/antfarm/
     models/        # Mock and OpenAI-compatible implementations
     memory/        # Initial in-memory implementation
     storage/       # SQLite implementation
-    api/           # Future HTTP/WebSocket transport adapters
+    api/           # Planned HTTP/WebSocket transport adapters
   config/          # Strict schema, YAML loader, composition registry
   cli.py            # Thin application-service client and terminal renderer
-web/                # Future Next.js control plane; API client only
+web/                # Planned Next.js control plane; API client only
 scenarios/examples/
 tests/{unit,integration,fixtures}/
 docs/adr/
@@ -363,3 +411,18 @@ docs/adr/
 - Provider calls may stall; adapters enforce configured timeouts and emit safe failures.
 - Scenario and event churn can break stored runs; both are versioned from their first persisted form.
 - Custom metrics initially consume events. A dedicated metrics plugin contract waits for a concrete need.
+- The current scenario schema, composition root, public-profile projection, and
+  resolved-agent inspection have explicit counter/commons and social/economic
+  branches. Treat them as version-1/Society coupling to migrate behind evidenced
+  mode or capability seams, not as generic core fields and not as a reason for a
+  wholesale rewrite.
+- Schema version 1 requires model-backed agents. Generic definitions should allow
+  non-agent entities and deterministic/non-LLM behavior where a simulation does
+  not need cognition, while keeping provider concerns outside the core.
+- Running-task ownership and committed-event subscriptions are process-local;
+  SQLite supplies durable run/event queries but does not provide distributed run
+  coordination. The first web topology must define reconnection, backpressure,
+  application lifetime, and ownership without implying multi-process failover.
+- Configuration inspection includes both complete configuring-user data and a
+  separately filtered public projection. Authentication and future viewer roles
+  must preserve private/public distinctions at the API boundary.

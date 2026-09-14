@@ -2,7 +2,12 @@
 
 [![CI](https://github.com/EmpyreanMist/ai-antfarm/actions/workflows/ci.yml/badge.svg)](https://github.com/EmpyreanMist/ai-antfarm/actions/workflows/ci.yml)
 
-AntFarm AI is a local-first Python framework for reproducible artificial-society simulations. The domain owns agents, environments, actions, state, time, and events; external model providers and persistence systems integrate through ports and adapters.
+AntFarm AI is a local-first simulation platform for reproducible experiments with
+autonomous AI agents. Its current major experience is an artificial society; the
+roadmap evolves that capability into the first built-in Society mode alongside
+future purpose-built modes and fully custom simulations. The domain owns agents,
+environments, actions, state, time, and events; external model providers,
+persistence, transports, and presentation integrate through ports and adapters.
 
 ## Current Status
 
@@ -29,9 +34,11 @@ The foundation currently includes:
 - Validated live societies of 1–10 distinct agents over shared model configurations
 - Ephemeral `--model` selection with Ollama availability preflight
 - Quiet society-first output plus explicit `--verbose` lifecycle diagnostics
+- Stable transport-neutral run lifecycle, inspection, query, error, pagination,
+  and committed-event subscription contracts
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, M2-01 through M2-05, and M3-01 through M3-04 are complete. See
+M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Quick Start
