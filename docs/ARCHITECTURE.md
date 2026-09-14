@@ -92,10 +92,17 @@ actor and current tick, and the environment validates bounded non-empty text.
 Accepted messages receive deterministic IDs. Messages applied during tick T are
 excluded from every observation in T, delivered to each configured agent's
 bounded memory after cognition finishes, and become visible in bounded public
-history in T+1. Public observations contain only a bounded ID roster, shared
-resources, the observer's own holding, and recent accepted messages; personality
-and private recall never cross between agents. Text in observations and memory is
-untrusted simulation data and cannot change the action contract.
+history in T+1. Public observations contain only a bounded roster, shared
+resources, the observer's own holding, recent accepted messages, and profile
+fields explicitly projected as public. Configured money, reusable resources,
+recurring income, and occupation are immutable economic profile facts; commons
+holdings remain mutable environment-owned state and support per-agent initial
+endowments. Visibility is private by default and independently covers wealth,
+possessions, occupation, status, reputation, relationships, health, and group
+membership. Another agent's roster entry receives only the fields allowed by
+that agent's visibility. Personality, beliefs, private information, and private
+recall never cross between agents. Text in observations and memory is untrusted
+simulation data and cannot change the action contract.
 
 Malformed output, timeout, validation failure, and rejected actions produce structured failure events and leave world state unchanged. Event subscribers run after persistence and are observational; they cannot participate in state mutation.
 
@@ -249,6 +256,11 @@ application services orchestrate deterministic generation and overrides. CLI,
 HTTP, and UI adapters only translate user input into those shared operations.
 Private profile data, private memory, internal state, and explicitly observable
 public data remain distinct throughout resolution and cognition context building.
+Composition derives a minimal public-profile projection from validated visibility
+metadata and gives only that projection to the environment. The environment adds
+current holdings only for agents whose possessions are public. Providers receive
+the active agent's full profile separately from the environment observation, so
+public projection cannot expose another agent's private profile or memory.
 
 The built-in environment catalog currently contains the deterministic `counter`
 environment with `increment`, and the finite shared-resource `commons`

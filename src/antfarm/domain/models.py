@@ -1,6 +1,6 @@
 """Small immutable values used by the M0.1 execution lifecycle."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
@@ -194,6 +194,71 @@ class SocialStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class EconomicSituation:
+    """An agent's configured economic facts, distinct from mutable world state."""
+
+    money: int | None = None
+    resources: Mapping[str, int] = field(default_factory=lambda: MappingProxyType({}))
+    recurring_income: int | None = None
+    occupation: str | None = None
+
+    def __post_init__(self) -> None:
+        resources = dict(self.resources)
+        values = (self.money, self.recurring_income, *resources.values())
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in values
+            if value is not None
+        ):
+            raise ValueError("economic amounts must be non-negative integers")
+        if any(not name.strip() for name in resources):
+            raise ValueError("economic resource names must not be empty")
+        if self.occupation is not None and not self.occupation.strip():
+            raise ValueError("economic occupation must not be empty")
+        if (
+            self.money is None
+            and not resources
+            and self.recurring_income is None
+            and self.occupation is None
+        ):
+            raise ValueError("economic situation must not be empty")
+        object.__setattr__(self, "resources", MappingProxyType(resources))
+
+
+@dataclass(frozen=True, slots=True)
+class InformationVisibility:
+    """Public/private metadata for independently observable profile dimensions."""
+
+    wealth: str = "private"
+    possessions: str = "private"
+    occupation: str = "private"
+    status: str = "private"
+    reputation: str = "private"
+    relationships: str = "private"
+    health: str = "private"
+    group_membership: str = "private"
+
+    def __post_init__(self) -> None:
+        if any(
+            getattr(self, name) not in {"private", "public"}
+            for name in self.__dataclass_fields__
+        ):
+            raise ValueError("information visibility must be private or public")
+
+
+@dataclass(frozen=True, slots=True)
+class PublicAgentProfile:
+    """The typed subset of profile facts allowed into other agents' observations."""
+
+    economics: EconomicSituation | None = None
+    social_status: SocialStatus | None = None
+
+    def __post_init__(self) -> None:
+        if self.economics is None and self.social_status is None:
+            raise ValueError("public agent profile must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class PrivateInformation:
     statements: Sequence[str]
 
@@ -216,6 +281,7 @@ class AgentProfile:
     communication: CommunicationPreferences | None = None
     traits: BehavioralTraits | None = None
     social_status: SocialStatus | None = None
+    economics: EconomicSituation | None = None
     private_information: PrivateInformation | None = None
 
     def __post_init__(self) -> None:

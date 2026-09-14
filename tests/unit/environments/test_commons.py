@@ -1,7 +1,14 @@
 from random import Random
 from typing import cast
 
-from antfarm.domain import ActionProposal, AgentId, Tick
+from antfarm.domain import (
+    ActionProposal,
+    AgentId,
+    EconomicSituation,
+    InformationVisibility,
+    PublicAgentProfile,
+    Tick,
+)
 from antfarm.domain.json_values import JsonObject
 from antfarm.environments import CommonsEnvironment
 
@@ -65,6 +72,57 @@ def test_snapshot_restore_preserves_agent_scoped_state() -> None:
 
     assert restored.snapshot() == original.snapshot()
     assert restored.observe(alice, Tick(2)) == original.observe(alice, Tick(2))
+
+
+def test_inequality_and_public_possessions_are_observer_scoped() -> None:
+    alice = AgentId("alice")
+    bob = AgentId("bob")
+    environment = CommonsEnvironment(
+        initial_resource=5,
+        initial_endowment=1,
+        initial_holdings={alice: 9},
+        agent_ids=(alice, bob),
+        social=True,
+        public_profiles={
+            alice: PublicAgentProfile(economics=EconomicSituation(money=100)),
+        },
+        visibility={
+            alice: InformationVisibility(wealth="public", possessions="public"),
+            bob: InformationVisibility(),
+        },
+    )
+
+    alice_observation = environment.observe(alice, Tick(1)).state
+    bob_observation = environment.observe(bob, Tick(1)).state
+
+    assert alice_observation["own_holding"] == 9
+    assert alice_observation["roster"] == ({"id": "alice"}, {"id": "bob"})
+    assert bob_observation["own_holding"] == 1
+    assert bob_observation["roster"] == (
+        {
+            "id": "alice",
+            "public_profile": {
+                "economics": {"money": 100, "holding": 9}
+            },
+        },
+        {"id": "bob"},
+    )
+
+    harvest = environment.validate(
+        ActionProposal(actor_id=alice, kind="harvest", parameters={"amount": 1})
+    )
+    assert harvest.action is not None
+    environment.apply(harvest.action, Random(1), Tick(1))
+    updated_roster = environment.observe(bob, Tick(2)).state["roster"]
+    assert updated_roster == (
+        {
+            "id": "alice",
+            "public_profile": {
+                "economics": {"money": 100, "holding": 10}
+            },
+        },
+        {"id": "bob"},
+    )
 
 
 def test_invalid_commons_proposals_do_not_change_state() -> None:

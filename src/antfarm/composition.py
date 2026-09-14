@@ -16,6 +16,7 @@ from antfarm.application.engine import SimulationEngine
 from antfarm.application.metrics import BuiltInMetricCollector
 from antfarm.application.scheduler import StableScheduler
 from antfarm.config.schema import (
+    AgentProfileConfig,
     BehavioralTraitsConfig,
     CommonsEnvironmentConfig,
     MockProviderConfig,
@@ -30,12 +31,15 @@ from antfarm.domain.models import (
     AgentProfile,
     BehavioralTraits,
     CommunicationPreferences,
+    EconomicSituation,
+    InformationVisibility,
     PrivateInformation,
     ProfileBeliefs,
     ProfileGoals,
     ProfileIdentity,
     ProfilePersonality,
     ProfileValues,
+    PublicAgentProfile,
     RunId,
     RunMetadata,
     SocialStatus,
@@ -84,6 +88,64 @@ def _behavioral_traits(config: BehavioralTraitsConfig) -> BehavioralTraits:
         forgiveness=config.forgiveness,
         sociability=config.sociability,
     )
+
+
+def _information_visibility(config: AgentProfileConfig) -> InformationVisibility:
+    visibility = config.visibility
+    return InformationVisibility(
+        wealth=visibility.wealth,
+        possessions=visibility.possessions,
+        occupation=visibility.occupation,
+        status=visibility.status,
+        reputation=visibility.reputation,
+        relationships=visibility.relationships,
+        health=visibility.health,
+        group_membership=visibility.group_membership,
+    )
+
+
+def _public_profile(config: AgentProfileConfig) -> PublicAgentProfile | None:
+    """Project only explicitly public fields for environment-owned observation."""
+
+    economics = None
+    if config.economics is not None:
+        money = (
+            config.economics.money
+            if config.visibility.wealth == "public"
+            else None
+        )
+        recurring_income = (
+            config.economics.recurring_income
+            if config.visibility.wealth == "public"
+            else None
+        )
+        resources = (
+            config.economics.resources
+            if config.visibility.possessions == "public"
+            else {}
+        )
+        occupation = (
+            config.economics.occupation
+            if config.visibility.occupation == "public"
+            else None
+        )
+        if money is not None or recurring_income is not None or resources or occupation:
+            economics = EconomicSituation(
+                money=money,
+                resources=resources,
+                recurring_income=recurring_income,
+                occupation=occupation,
+            )
+    social_status = None
+    if config.visibility.status == "public" and config.social_status is not None:
+        social_status = SocialStatus(
+            label=config.social_status.label,
+            roles=config.social_status.roles,
+            standing=config.social_status.standing,
+        )
+    if economics is None and social_status is None:
+        return None
+    return PublicAgentProfile(economics=economics, social_status=social_status)
 
 
 def compose(
@@ -236,6 +298,16 @@ def compose(
                     if profile_config.social_status is not None
                     else None
                 ),
+                economics=(
+                    EconomicSituation(
+                        money=profile_config.economics.money,
+                        resources=profile_config.economics.resources,
+                        recurring_income=profile_config.economics.recurring_income,
+                        occupation=profile_config.economics.occupation,
+                    )
+                    if profile_config.economics is not None
+                    else None
+                ),
                 private_information=(
                     PrivateInformation(profile_config.private_information)
                     if profile_config.private_information is not None
@@ -266,10 +338,30 @@ def compose(
     )
     environment: Environment
     if isinstance(config.environment, CommonsEnvironmentConfig):
+        active_agent_ids = set(agents)
+        profile_configs = {
+            AgentId(agent.id): config.profiles[agent.profile_ref]
+            for agent in resolved_agents
+            if agent.profile_ref is not None
+        }
         environment = CommonsEnvironment(
             initial_resource=config.environment.initial_resource,
             initial_endowment=config.environment.initial_endowment,
             agent_ids=agents,
+            initial_holdings={
+                AgentId(agent_id): amount
+                for agent_id, amount in config.environment.initial_holdings.items()
+                if AgentId(agent_id) in active_agent_ids
+            },
+            public_profiles={
+                agent_id: public_profile
+                for agent_id, profile_config in profile_configs.items()
+                if (public_profile := _public_profile(profile_config)) is not None
+            },
+            visibility={
+                agent_id: _information_visibility(profile_config)
+                for agent_id, profile_config in profile_configs.items()
+            },
             social=config.environment.social is not None,
             message_max_length=(
                 config.environment.social.message_max_length

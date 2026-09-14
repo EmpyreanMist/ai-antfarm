@@ -33,6 +33,16 @@ profiles:
       fairness: 0.9
       sociability: 0.65
     social_status: {label: trusted, roles: [steward], standing: 0.75}
+    economics:
+      money: 80
+      resources: {tools: 2}
+      recurring_income: 6
+      occupation: steward
+    visibility:
+      wealth: public
+      possessions: public
+      occupation: public
+      status: public
     private_information: [Worries that the resource will collapse]
   rival:
     identity: {display_name: Bob, description: An ambitious newcomer.}
@@ -53,6 +63,13 @@ profiles:
       ambition: 0.9
       sociability: 0.5
     social_status: {label: newcomer, roles: [trader], standing: 0.35}
+    economics:
+      money: 15
+      resources: {trade_goods: 3}
+      recurring_income: 2
+      occupation: trader
+    visibility: {occupation: public, status: public}
+    private_information: [Keeps personal wealth secret]
 agents:
   - {id: alice, model_ref: shared, profile_ref: steward}
   - {id: bob, model_ref: shared, profile_ref: rival}
@@ -61,6 +78,7 @@ environment:
   kind: commons
   initial_resource: 8
   initial_endowment: 2
+  initial_holdings: {alice: 5, bob: 1}
   social: {message_max_length: 300, history_limit: 10, roster_limit: 10}
 memory: {kind: in_memory, recall_limit: 8, retention_limit: 16}
 scheduling: {kind: stable, interval: 1}

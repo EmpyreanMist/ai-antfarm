@@ -126,6 +126,89 @@ def test_rich_profile_validates_all_independent_traits_and_conflicts() -> None:
     assert config.expand_agents()[0].profile_ref == "complex"
 
 
+def test_economic_state_visibility_and_initial_inequality_are_validated() -> None:
+    data = _valid_data()
+    data["providers"] = {"scripted": {"kind": "mock", "decisions": {}}}
+    data["profiles"] = {
+        "worker": {
+            "economics": {
+                "money": 25,
+                "resources": {"tools": 2},
+                "recurring_income": 4,
+                "occupation": "carpenter",
+            },
+            "visibility": {
+                "wealth": "public",
+                "possessions": "public",
+                "occupation": "public",
+                "status": "private",
+                "reputation": "private",
+                "relationships": "private",
+                "health": "private",
+                "group_membership": "private",
+            },
+        }
+    }
+    data["agents"] = [
+        {"id": "alice", "model_ref": "deterministic", "profile_ref": "worker"}
+    ]
+    data["actions"] = [{"kind": "harvest"}]
+    data["environment"] = {
+        "kind": "commons",
+        "initial_resource": 10,
+        "initial_endowment": 1,
+        "initial_holdings": {"alice": 8},
+    }
+
+    config = ScenarioConfig.model_validate(data)
+
+    profile = config.profiles["worker"]
+    assert profile.economics is not None
+    assert profile.economics.resources == {"tools": 2}
+    assert profile.visibility.wealth == "public"
+    assert config.environment.kind == "commons"
+    assert config.environment.initial_holdings == {"alice": 8}
+
+
+@pytest.mark.parametrize(
+    ("economics", "visibility"),
+    [
+        ({}, {}),
+        ({"money": -1}, {}),
+        ({"resources": {"tools": -1}}, {}),
+        ({"money": 1}, {"wealth": "friends"}),
+        ({"money": 1}, {"unknown_dimension": "public"}),
+    ],
+)
+def test_economic_state_and_visibility_reject_invalid_values(
+    economics: dict[str, object], visibility: dict[str, object]
+) -> None:
+    data = _valid_data()
+    data["profiles"] = {
+        "invalid": {"economics": economics, "visibility": visibility}
+    }
+    data["agents"] = [
+        {"id": "alice", "model_ref": "deterministic", "profile_ref": "invalid"}
+    ]
+
+    with pytest.raises(ValidationError):
+        ScenarioConfig.model_validate(data)
+
+
+def test_commons_initial_holdings_reject_unknown_agents() -> None:
+    data = _valid_data()
+    data["providers"] = {"scripted": {"kind": "mock", "decisions": {}}}
+    data["actions"] = [{"kind": "harvest"}]
+    data["environment"] = {
+        "kind": "commons",
+        "initial_resource": 10,
+        "initial_holdings": {"bob": 8},
+    }
+
+    with pytest.raises(ValidationError, match="unknown agents: bob"):
+        ScenarioConfig.model_validate(data)
+
+
 @pytest.mark.parametrize(
     "profile",
     [

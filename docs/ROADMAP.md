@@ -63,6 +63,10 @@ legacy personality-only scenarios remain supported.
 
 ### M3-02: Economic State and Information Boundaries
 
+**Status: Complete.** Implemented additively in schema version 1 with private-by-
+default visibility and per-agent commons endowment overrides; recurring income is
+descriptive state only and does not imply automatic accrual or market policy.
+
 - Represent simple economic differences including money, reusable holdings or
   resources, optional recurring income, and economic/social status. Reuse the
   existing resource model where its semantics fit rather than duplicating it.

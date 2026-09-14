@@ -13,6 +13,7 @@ from antfarm.domain import (
     AgentProfile,
     BehavioralTraits,
     CommunicationPreferences,
+    EconomicSituation,
     MemoryItem,
     Observation,
     PrivateInformation,
@@ -155,6 +156,12 @@ def test_rich_profile_context_is_compact_and_social_guidance_is_behavioral() -> 
         communication=CommunicationPreferences(style="concise"),
         traits=BehavioralTraits(generosity=0.8, greed=0.7, patience=0.2),
         social_status=SocialStatus(roles=("merchant",), standing=0.6),
+        economics=EconomicSituation(
+            money=40,
+            resources={"shop": 1},
+            recurring_income=5,
+            occupation="merchant",
+        ),
         private_information=PrivateInformation(("Has a private debt",)),
     )
     provider = OpenAICompatibleModelProvider(
@@ -178,6 +185,12 @@ def test_rich_profile_context_is_compact_and_social_guidance_is_behavioral() -> 
         "patience": 0.2,
     }
     assert rich_context["private_information"] == ["Has a private debt"]
+    assert rich_context["economics"] == {
+        "money": 40,
+        "resources": {"shop": 1},
+        "recurring_income": 5,
+        "occupation": "merchant",
+    }
     assert "description" not in rich_context["identity"]
     system_prompt = body["messages"][0]["content"]
     assert "not as rules that mechanically select an action" in system_prompt

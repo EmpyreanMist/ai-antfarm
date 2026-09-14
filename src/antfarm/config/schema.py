@@ -19,6 +19,7 @@ EnvironmentVariable = Annotated[str, Field(min_length=1, pattern=r"^[A-Z_][A-Z0-
 Scalar = str | int | float | bool | None
 ProfileText = Annotated[str, Field(min_length=1, pattern=r".*\S.*")]
 TraitScore = Annotated[float, Field(ge=0, le=1)]
+VisibilityLevel = Literal["private", "public"]
 M2_MAX_ACTIVE_AGENTS = 10
 
 
@@ -140,6 +141,35 @@ class SocialStatusConfig(StrictModel):
         return self
 
 
+class EconomicSituationConfig(StrictModel):
+    money: NonNegativeInt | None = None
+    resources: dict[Identifier, NonNegativeInt] = Field(default_factory=dict)
+    recurring_income: NonNegativeInt | None = None
+    occupation: ProfileText | None = None
+
+    @model_validator(mode="after")
+    def is_not_empty(self) -> Self:
+        if (
+            self.money is None
+            and not self.resources
+            and self.recurring_income is None
+            and self.occupation is None
+        ):
+            raise ValueError("economic situation must not be empty")
+        return self
+
+
+class InformationVisibilityConfig(StrictModel):
+    wealth: VisibilityLevel = "private"
+    possessions: VisibilityLevel = "private"
+    occupation: VisibilityLevel = "private"
+    status: VisibilityLevel = "private"
+    reputation: VisibilityLevel = "private"
+    relationships: VisibilityLevel = "private"
+    health: VisibilityLevel = "private"
+    group_membership: VisibilityLevel = "private"
+
+
 class AgentProfileConfig(StrictModel):
     identity: ProfileIdentityConfig | None = None
     personality: ProfilePersonalityConfig | None = None
@@ -149,12 +179,18 @@ class AgentProfileConfig(StrictModel):
     communication_preferences: CommunicationPreferencesConfig | None = None
     behavioral_traits: BehavioralTraitsConfig | None = None
     social_status: SocialStatusConfig | None = None
+    economics: EconomicSituationConfig | None = None
+    visibility: InformationVisibilityConfig = Field(
+        default_factory=InformationVisibilityConfig
+    )
     private_information: tuple[ProfileText, ...] | None = None
 
     @model_validator(mode="after")
     def sections_are_not_empty(self) -> Self:
         if not any(
-            getattr(self, name) is not None for name in type(self).model_fields
+            getattr(self, name) is not None
+            for name in type(self).model_fields
+            if name != "visibility"
         ):
             raise ValueError("profile must contain at least one section")
         for name in ("goals", "beliefs", "values", "private_information"):
@@ -229,6 +265,7 @@ class CommonsEnvironmentConfig(StrictModel):
     kind: Literal["commons"]
     initial_resource: NonNegativeInt
     initial_endowment: NonNegativeInt = 0
+    initial_holdings: dict[Identifier, NonNegativeInt] = Field(default_factory=dict)
     social: CommonsSocialConfig | None = None
 
 
@@ -364,6 +401,16 @@ class ScenarioConfig(StrictModel):
                 raise ValueError(
                     f"agent {agent.id!r} cannot reference both a profile and a "
                     "legacy personality"
+                )
+
+        if isinstance(self.environment, CommonsEnvironmentConfig):
+            unknown_holdings = set(self.environment.initial_holdings).difference(
+                agent.id for agent in expanded_agents
+            )
+            if unknown_holdings:
+                names = ", ".join(sorted(unknown_holdings))
+                raise ValueError(
+                    f"commons initial holdings reference unknown agents: {names}"
                 )
 
         action_kinds = [action.kind for action in self.actions]

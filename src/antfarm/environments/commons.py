@@ -7,8 +7,10 @@ from antfarm.domain.models import (
     ActionProposal,
     ActionResult,
     AgentId,
+    InformationVisibility,
     MemoryItem,
     Observation,
+    PublicAgentProfile,
     Tick,
     ValidatedAction,
     ValidationResult,
@@ -25,6 +27,9 @@ class CommonsEnvironment:
         initial_resource: int,
         initial_endowment: int,
         agent_ids: Iterable[AgentId],
+        initial_holdings: Mapping[AgentId, int] | None = None,
+        public_profiles: Mapping[AgentId, PublicAgentProfile] | None = None,
+        visibility: Mapping[AgentId, InformationVisibility] | None = None,
         social: bool = False,
         message_max_length: int = 500,
         history_limit: int = 20,
@@ -35,9 +40,24 @@ class CommonsEnvironment:
         if message_max_length < 1 or history_limit < 1 or roster_limit < 1:
             raise ValueError("social message limits must be positive")
         self._resource = initial_resource
+        configured_holdings = initial_holdings or {}
         self._holdings = {
             agent_id: initial_endowment for agent_id in sorted(agent_ids, key=str)
         }
+        if set(configured_holdings).difference(self._holdings):
+            raise ValueError("initial holdings contain an unknown agent")
+        if any(
+            isinstance(amount, bool) or not isinstance(amount, int) or amount < 0
+            for amount in configured_holdings.values()
+        ):
+            raise ValueError("initial holdings must be non-negative integers")
+        self._holdings.update(configured_holdings)
+        self._public_profiles = dict(public_profiles or {})
+        self._visibility = dict(visibility or {})
+        if set(self._public_profiles).difference(self._holdings) or set(
+            self._visibility
+        ).difference(self._holdings):
+            raise ValueError("observable profile metadata contains an unknown agent")
         self._social = social
         self._message_max_length = message_max_length
         self._history_limit = history_limit
@@ -58,7 +78,7 @@ class CommonsEnvironment:
                 visible_agents[-1] = agent_id
             state.update(
                 roster=tuple(
-                    {"id": str(member_id)}
+                    self._roster_entry(member_id, observer_id=agent_id)
                     for member_id in visible_agents
                 ),
                 recent_messages=tuple(
@@ -72,6 +92,50 @@ class CommonsEnvironment:
             tick=tick,
             state=freeze_object(state),
         )
+
+    def _roster_entry(
+        self, member_id: AgentId, *, observer_id: AgentId
+    ) -> dict[str, object]:
+        entry: dict[str, object] = {"id": str(member_id)}
+        if member_id == observer_id:
+            return entry
+        profile: dict[str, object] = {}
+        public_profile = self._public_profiles.get(member_id)
+        if public_profile is not None and public_profile.economics is not None:
+            public_economics = public_profile.economics
+            economics: dict[str, object] = {}
+            if public_economics.money is not None:
+                economics["money"] = public_economics.money
+            if public_economics.recurring_income is not None:
+                economics["recurring_income"] = public_economics.recurring_income
+            if public_economics.resources:
+                economics["resources"] = dict(public_economics.resources)
+            if public_economics.occupation is not None:
+                economics["occupation"] = public_economics.occupation
+            profile["economics"] = economics
+        if public_profile is not None and public_profile.social_status is not None:
+            public_status = public_profile.social_status
+            status: dict[str, object] = {}
+            if public_status.label is not None:
+                status["label"] = public_status.label
+            if public_status.roles:
+                status["roles"] = list(public_status.roles)
+            if public_status.standing is not None:
+                status["standing"] = public_status.standing
+            profile["social_status"] = status
+        member_visibility = self._visibility.get(member_id, InformationVisibility())
+        if member_visibility.possessions == "public":
+            existing_economics = profile.get("economics")
+            economics = (
+                dict(existing_economics)
+                if isinstance(existing_economics, Mapping)
+                else {}
+            )
+            economics["holding"] = self._holdings[member_id]
+            profile["economics"] = economics
+        if profile:
+            entry["public_profile"] = profile
+        return entry
 
     def validate(self, proposal: ActionProposal) -> ValidationResult:
         if proposal.actor_id not in self._holdings:

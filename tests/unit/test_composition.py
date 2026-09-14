@@ -157,6 +157,95 @@ def test_composition_delivers_distinct_rich_profiles_over_a_shared_model(
     assert requests[1].personality is None
 
 
+def test_economic_context_exposes_only_permitted_other_agent_information(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _shared_model_config().model_dump(mode="json")
+    source["personalities"] = {}
+    source["profiles"] = {
+        "public-wealth": {
+            "beliefs": ["Alice private belief"],
+            "social_status": {"label": "established", "standing": 0.8},
+            "economics": {
+                "money": 100,
+                "resources": {"workshop": 1},
+                "recurring_income": 10,
+                "occupation": "builder",
+            },
+            "visibility": {
+                "wealth": "public",
+                "possessions": "public",
+                "occupation": "public",
+                "status": "public",
+            },
+            "private_information": ["Alice private secret"],
+        },
+        "private-wealth": {
+            "beliefs": ["Bob private belief"],
+            "social_status": {"label": "unknown", "standing": 0.2},
+            "economics": {
+                "money": 3,
+                "resources": {"tools": 2},
+                "recurring_income": 1,
+                "occupation": "repairer",
+            },
+            "private_information": ["Bob private secret"],
+        },
+    }
+    source["agents"] = [
+        {"id": "alice", "model_ref": "shared", "profile_ref": "public-wealth"},
+        {"id": "bob", "model_ref": "shared", "profile_ref": "private-wealth"},
+    ]
+    source["actions"] = [{"kind": "harvest"}]
+    source["environment"] = {
+        "kind": "commons",
+        "initial_resource": 20,
+        "initial_endowment": 0,
+        "initial_holdings": {"alice": 9, "bob": 1},
+        "social": {},
+    }
+    config = ScenarioConfig.model_validate(source)
+    _RecordingProvider.instances.clear()
+    monkeypatch.setattr(
+        composition, "OpenAICompatibleModelProvider", _RecordingProvider
+    )
+
+    simulation = composition.compose(config)
+    asyncio.run(simulation.engine.step())
+
+    alice_request, bob_request = _RecordingProvider.instances[0].requests
+    assert alice_request.profile is not None
+    assert bob_request.profile is not None
+    assert alice_request.profile.economics is not None
+    assert bob_request.profile.economics is not None
+    assert alice_request.profile.economics.money == 100
+    assert bob_request.profile.economics.money == 3
+    assert alice_request.observation.state["own_holding"] == 9
+    assert bob_request.observation.state["own_holding"] == 1
+    assert alice_request.observation.state["roster"] == (
+        {"id": "alice"},
+        {"id": "bob"},
+    )
+    assert bob_request.observation.state["roster"] == (
+        {
+            "id": "alice",
+            "public_profile": {
+                "economics": {
+                    "money": 100,
+                    "recurring_income": 10,
+                    "resources": {"workshop": 1},
+                    "occupation": "builder",
+                    "holding": 9,
+                },
+                "social_status": {"label": "established", "standing": 0.8},
+            },
+        },
+        {"id": "bob"},
+    )
+    assert "Alice private" not in str(bob_request.observation.state)
+    assert "Bob private" not in str(alice_request.observation.state)
+
+
 class _UnavailableProvider(_RecordingProvider):
     async def generate(self, request: ModelRequest) -> ModelResponse:
         del request

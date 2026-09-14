@@ -202,6 +202,17 @@ def _profile_context(profile: AgentProfile) -> dict[str, object]:
         if profile.social_status.standing is not None:
             status["standing"] = profile.social_status.standing
         context["social_status"] = status
+    if profile.economics is not None:
+        economics: dict[str, object] = {}
+        if profile.economics.money is not None:
+            economics["money"] = profile.economics.money
+        if profile.economics.resources:
+            economics["resources"] = dict(profile.economics.resources)
+        if profile.economics.recurring_income is not None:
+            economics["recurring_income"] = profile.economics.recurring_income
+        if profile.economics.occupation is not None:
+            economics["occupation"] = profile.economics.occupation
+        context["economics"] = economics
     if profile.private_information is not None:
         context["private_information"] = list(
             profile.private_information.statements
