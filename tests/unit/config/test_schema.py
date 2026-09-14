@@ -1,6 +1,7 @@
 import copy
 import json
 from collections.abc import Callable
+from typing import cast
 
 import pytest
 from pydantic import ValidationError
@@ -63,6 +64,101 @@ def test_agent_pools_expand_in_stable_order() -> None:
         "zeta-001",
         "zeta-002",
     ]
+
+
+def test_rich_profile_validates_all_independent_traits_and_conflicts() -> None:
+    data = _valid_data()
+    traits = {
+        "generosity": 0.9,
+        "greed": 0.8,
+        "selfishness": 0.7,
+        "empathy": 0.6,
+        "assertiveness": 0.5,
+        "agreeableness": 0.4,
+        "honesty": 0.3,
+        "conformity": 0.2,
+        "patience": 0.1,
+        "impulsiveness": 0.9,
+        "risk_tolerance": 0.8,
+        "competitiveness": 0.7,
+        "envy": 0.6,
+        "aggression": 0.5,
+        "trust": 0.4,
+        "ambition": 0.3,
+        "materialism": 0.2,
+        "fairness": 0.1,
+        "forgiveness": 0.9,
+        "sociability": 0.8,
+    }
+    data["profiles"] = {
+        "complex": {
+            "identity": {"display_name": "Alice", "description": "A trader."},
+            "personality": {
+                "description": "Warm but fiercely competitive.",
+                "qualities": ["observant", "direct"],
+            },
+            "goals": ["Build security", "Win recognition"],
+            "beliefs": ["Cooperation can be useful"],
+            "values": ["Fairness", "Personal success"],
+            "communication_preferences": {
+                "style": "concise",
+                "preferences": ["Make concrete proposals"],
+            },
+            "behavioral_traits": traits,
+            "social_status": {
+                "label": "respected",
+                "roles": ["merchant"],
+                "standing": 0.75,
+            },
+            "private_information": ["Owes a private debt"],
+        }
+    }
+    data["agents"] = [
+        {"id": "alice", "model_ref": "deterministic", "profile_ref": "complex"}
+    ]
+
+    config = ScenarioConfig.model_validate(data)
+
+    profile = config.profiles["complex"]
+    assert profile.behavioral_traits is not None
+    assert profile.behavioral_traits.generosity == 0.9
+    assert profile.behavioral_traits.greed == 0.8
+    assert config.expand_agents()[0].profile_ref == "complex"
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [
+        {},
+        {"goals": []},
+        {"behavioral_traits": {}},
+        {"behavioral_traits": {"empathy": -0.01}},
+        {"behavioral_traits": {"empathy": 1.01}},
+        {"communication_preferences": {}},
+        {"social_status": {}},
+    ],
+)
+def test_rich_profile_rejects_empty_or_out_of_range_sections(
+    profile: dict[str, object],
+) -> None:
+    data = _valid_data()
+    data["profiles"] = {"invalid": profile}
+    data["agents"] = [
+        {"id": "alice", "model_ref": "deterministic", "profile_ref": "invalid"}
+    ]
+
+    with pytest.raises(ValidationError):
+        ScenarioConfig.model_validate(data)
+
+
+def test_agent_cannot_combine_rich_and_legacy_profile_references() -> None:
+    data = _valid_data()
+    data["profiles"] = {"rich": {"goals": ["Act"]}}
+    agents = cast(list[dict[str, object]], data["agents"])
+    agents[0]["profile_ref"] = "rich"
+
+    with pytest.raises(ValidationError, match="both a profile"):
+        ScenarioConfig.model_validate(data)
 
 
 def test_pool_expansion_rejects_identifier_collisions() -> None:

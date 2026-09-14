@@ -1,6 +1,7 @@
 import asyncio
 import json
 from collections.abc import Mapping
+from dataclasses import replace
 
 import pytest
 
@@ -9,8 +10,18 @@ from antfarm.domain import (
     AgentId,
     AgentIdentity,
     AgentPersonality,
+    AgentProfile,
+    BehavioralTraits,
+    CommunicationPreferences,
     MemoryItem,
     Observation,
+    PrivateInformation,
+    ProfileBeliefs,
+    ProfileGoals,
+    ProfileIdentity,
+    ProfilePersonality,
+    ProfileValues,
+    SocialStatus,
     Tick,
 )
 from antfarm.ports.models import (
@@ -130,6 +141,49 @@ def test_structured_request_and_response_use_provider_neutral_values() -> None:
             },
         },
     }
+
+
+def test_rich_profile_context_is_compact_and_social_guidance_is_behavioral() -> None:
+    profile = AgentProfile(
+        identity=ProfileIdentity(display_name="Alice"),
+        personality=ProfilePersonality(
+            description="Warm and competitive.", qualities=("direct",)
+        ),
+        goals=ProfileGoals(("Secure resources",)),
+        beliefs=ProfileBeliefs(("Cooperation can help",)),
+        values=ProfileValues(("Fairness", "Achievement")),
+        communication=CommunicationPreferences(style="concise"),
+        traits=BehavioralTraits(generosity=0.8, greed=0.7, patience=0.2),
+        social_status=SocialStatus(roles=("merchant",), standing=0.6),
+        private_information=PrivateInformation(("Has a private debt",)),
+    )
+    provider = OpenAICompatibleModelProvider(
+        base_url="https://models.example/v1",
+        model="test",
+        timeout_seconds=1,
+    )
+
+    body = json.loads(
+        provider._request_body(  # noqa: SLF001
+            replace(_request(), personality=None, profile=profile)
+        )
+    )
+    context = json.loads(body["messages"][1]["content"])
+    rich_context = context["private_context"]["profile"]
+
+    assert rich_context["identity"] == {"display_name": "Alice"}
+    assert rich_context["behavioral_traits"] == {
+        "generosity": 0.8,
+        "greed": 0.7,
+        "patience": 0.2,
+    }
+    assert rich_context["private_information"] == ["Has a private debt"]
+    assert "description" not in rich_context["identity"]
+    system_prompt = body["messages"][0]["content"]
+    assert "not as rules that mechanically select an action" in system_prompt
+    assert "Do not seek consensus or conflict for its own sake" in system_prompt
+    assert "Do not repeat earlier messages or points" in system_prompt
+    assert "Do not invent facts" in system_prompt
 
 
 @pytest.mark.parametrize(

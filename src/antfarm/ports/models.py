@@ -10,6 +10,7 @@ from antfarm.domain.models import (
     AgentId,
     AgentIdentity,
     AgentPersonality,
+    AgentProfile,
     MemoryItem,
     Observation,
 )
@@ -28,6 +29,7 @@ class ModelRequest:
     observation: Observation
     memories: Sequence[MemoryItem]
     available_actions: Sequence[JsonObject] = ()
+    profile: AgentProfile | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "memories", tuple(self.memories))

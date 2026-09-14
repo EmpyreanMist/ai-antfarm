@@ -16,6 +16,7 @@ from antfarm.application.engine import SimulationEngine
 from antfarm.application.metrics import BuiltInMetricCollector
 from antfarm.application.scheduler import StableScheduler
 from antfarm.config.schema import (
+    BehavioralTraitsConfig,
     CommonsEnvironmentConfig,
     MockProviderConfig,
     OpenAICompatibleProviderConfig,
@@ -23,7 +24,23 @@ from antfarm.config.schema import (
     SqliteStorageConfig,
 )
 from antfarm.domain.json_values import JsonObject
-from antfarm.domain.models import AgentId, AgentPersonality, RunId, RunMetadata, Tick
+from antfarm.domain.models import (
+    AgentId,
+    AgentPersonality,
+    AgentProfile,
+    BehavioralTraits,
+    CommunicationPreferences,
+    PrivateInformation,
+    ProfileBeliefs,
+    ProfileGoals,
+    ProfileIdentity,
+    ProfilePersonality,
+    ProfileValues,
+    RunId,
+    RunMetadata,
+    SocialStatus,
+    Tick,
+)
 from antfarm.domain.protocols import Environment
 from antfarm.environments import CommonsEnvironment, CounterEnvironment
 from antfarm.ports.models import ModelProvider, ModelResponse
@@ -42,6 +59,31 @@ class ComposedSimulation:
         for provider in self.providers:
             await provider.close()
         self.storage.close()
+
+
+def _behavioral_traits(config: BehavioralTraitsConfig) -> BehavioralTraits:
+    return BehavioralTraits(
+        generosity=config.generosity,
+        greed=config.greed,
+        selfishness=config.selfishness,
+        empathy=config.empathy,
+        assertiveness=config.assertiveness,
+        agreeableness=config.agreeableness,
+        honesty=config.honesty,
+        conformity=config.conformity,
+        patience=config.patience,
+        impulsiveness=config.impulsiveness,
+        risk_tolerance=config.risk_tolerance,
+        competitiveness=config.competitiveness,
+        envy=config.envy,
+        aggression=config.aggression,
+        trust=config.trust,
+        ambition=config.ambition,
+        materialism=config.materialism,
+        fairness=config.fairness,
+        forgiveness=config.forgiveness,
+        sociability=config.sociability,
+    )
 
 
 def compose(
@@ -129,17 +171,83 @@ def compose(
             )
         agent_id = AgentId(agent_config.id)
         personality = None
+        profile = None
         if agent_config.personality_ref is not None:
             personality_config = config.personalities[agent_config.personality_ref]
             personality = AgentPersonality(
                 description=personality_config.description,
                 traits=personality_config.traits,
             )
+        if agent_config.profile_ref is not None:
+            profile_config = config.profiles[agent_config.profile_ref]
+            profile = AgentProfile(
+                identity=(
+                    ProfileIdentity(
+                        display_name=profile_config.identity.display_name,
+                        description=profile_config.identity.description,
+                    )
+                    if profile_config.identity is not None
+                    else None
+                ),
+                personality=(
+                    ProfilePersonality(
+                        description=profile_config.personality.description,
+                        qualities=profile_config.personality.qualities,
+                    )
+                    if profile_config.personality is not None
+                    else None
+                ),
+                goals=(
+                    ProfileGoals(profile_config.goals)
+                    if profile_config.goals is not None
+                    else None
+                ),
+                beliefs=(
+                    ProfileBeliefs(profile_config.beliefs)
+                    if profile_config.beliefs is not None
+                    else None
+                ),
+                values=(
+                    ProfileValues(profile_config.values)
+                    if profile_config.values is not None
+                    else None
+                ),
+                communication=(
+                    CommunicationPreferences(
+                        style=profile_config.communication_preferences.style,
+                        preferences=(
+                            profile_config.communication_preferences.preferences
+                        ),
+                    )
+                    if profile_config.communication_preferences is not None
+                    else None
+                ),
+                traits=(
+                    _behavioral_traits(profile_config.behavioral_traits)
+                    if profile_config.behavioral_traits is not None
+                    else None
+                ),
+                social_status=(
+                    SocialStatus(
+                        label=profile_config.social_status.label,
+                        roles=profile_config.social_status.roles,
+                        standing=profile_config.social_status.standing,
+                    )
+                    if profile_config.social_status is not None
+                    else None
+                ),
+                private_information=(
+                    PrivateInformation(profile_config.private_information)
+                    if profile_config.private_information is not None
+                    else None
+                ),
+            )
         agents[agent_id] = ModelBackedAgent(
             id=agent_id,
             model_ref=agent_config.model_ref,
             provider=provider,
             personality=personality,
+            profile=profile,
             available_actions=available_actions,
         )
 

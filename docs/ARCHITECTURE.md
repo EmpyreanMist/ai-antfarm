@@ -74,9 +74,13 @@ Validated Scenario
 
 The engine owns the tick, event sequence, seeded random source, registry of agents, and mutation order. M0 awaits cognition sequentially and applies actions sequentially. Provider latency therefore affects throughput but cannot reorder state transitions. No mutable world object crosses into an agent or provider.
 
-Each model-backed agent resolves its public identity and optional private
-personality into immutable, provider-neutral request values. The request also
-contains only that agent's bounded recall and current agent-scoped observation.
+Each model-backed agent resolves its public identity and optional private legacy
+personality or rich profile into immutable, provider-neutral request values. Rich
+profiles are composed from typed identity, personality, goal, belief, value,
+communication, behavioral-trait, social-status, and private-information sections.
+Numeric behavioral traits are bounded tendencies supplied to cognition rather
+than engine-side action selectors. The request also contains only that agent's
+bounded recall and current agent-scoped observation.
 Agents assigned the same model reference share one provider instance, but the
 provider is stateless with respect to agent identity: private personality and
 memory are supplied afresh on every request and never enter another agent's
@@ -222,7 +226,8 @@ The versioned `ScenarioConfig` contains:
 - An optional validated active-agent prefix, bounded to 1–10 for M2-04
 - Named provider connections and named model configurations
 - Explicit agents and deterministically expanded agent pools
-- Personality references and per-agent or per-pool model references
+- Legacy personality or rich-profile references and per-agent or per-pool model
+  references
 - One environment kind/configuration and enabled action kinds
 - Memory strategy and cognition schedule configuration
 - Simulation rules, built-in metric identifiers, observability policy, and storage settings

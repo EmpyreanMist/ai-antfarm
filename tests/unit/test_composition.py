@@ -114,6 +114,49 @@ def test_composition_shares_backend_but_keeps_agent_context_isolated(
     ]
 
 
+def test_composition_delivers_distinct_rich_profiles_over_a_shared_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _shared_model_config().model_dump(mode="json")
+    source["personalities"] = {}
+    source["profiles"] = {
+        "patient": {
+            "identity": {"display_name": "Alice"},
+            "goals": ["Preserve resources"],
+            "behavioral_traits": {"patience": 0.9, "risk_tolerance": 0.1},
+        },
+        "bold": {
+            "identity": {"display_name": "Bob"},
+            "goals": ["Act before rivals"],
+            "behavioral_traits": {"patience": 0.1, "risk_tolerance": 0.9},
+        },
+    }
+    source["agents"] = [
+        {"id": "alice", "model_ref": "shared", "profile_ref": "patient"},
+        {"id": "bob", "model_ref": "shared", "profile_ref": "bold"},
+    ]
+    config = ScenarioConfig.model_validate(source)
+    _RecordingProvider.instances.clear()
+    monkeypatch.setattr(
+        composition, "OpenAICompatibleModelProvider", _RecordingProvider
+    )
+
+    simulation = composition.compose(config)
+    asyncio.run(simulation.engine.step())
+
+    requests = _RecordingProvider.instances[0].requests
+    assert len(requests) == 2
+    assert requests[0].profile is not None
+    assert requests[1].profile is not None
+    assert requests[0].profile != requests[1].profile
+    assert requests[0].profile.goals is not None
+    assert requests[1].profile.goals is not None
+    assert requests[0].profile.goals.statements == ("Preserve resources",)
+    assert requests[1].profile.goals.statements == ("Act before rivals",)
+    assert requests[0].personality is None
+    assert requests[1].personality is None
+
+
 class _UnavailableProvider(_RecordingProvider):
     async def generate(self, request: ModelRequest) -> ModelResponse:
         del request

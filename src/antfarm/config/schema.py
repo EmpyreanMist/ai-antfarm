@@ -17,6 +17,8 @@ Identifier = Annotated[str, Field(min_length=1, pattern=r"^[a-z][a-z0-9_-]*$")]
 EventKind = Annotated[str, Field(min_length=1, pattern=r"^[a-z][a-z0-9_.-]*$")]
 EnvironmentVariable = Annotated[str, Field(min_length=1, pattern=r"^[A-Z_][A-Z0-9_]*$")]
 Scalar = str | int | float | bool | None
+ProfileText = Annotated[str, Field(min_length=1, pattern=r".*\S.*")]
+TraitScore = Annotated[float, Field(ge=0, le=1)]
 M2_MAX_ACTIVE_AGENTS = 10
 
 
@@ -74,10 +76,98 @@ class PersonalityConfig(StrictModel):
     traits: dict[Identifier, Scalar] = Field(default_factory=dict)
 
 
+class ProfileIdentityConfig(StrictModel):
+    display_name: ProfileText
+    description: ProfileText | None = None
+
+
+class ProfilePersonalityConfig(StrictModel):
+    description: ProfileText
+    qualities: tuple[ProfileText, ...] = ()
+
+
+class CommunicationPreferencesConfig(StrictModel):
+    style: ProfileText | None = None
+    preferences: tuple[ProfileText, ...] = ()
+
+    @model_validator(mode="after")
+    def is_not_empty(self) -> Self:
+        if self.style is None and not self.preferences:
+            raise ValueError("communication preferences must not be empty")
+        return self
+
+
+class BehavioralTraitsConfig(StrictModel):
+    generosity: TraitScore | None = None
+    greed: TraitScore | None = None
+    selfishness: TraitScore | None = None
+    empathy: TraitScore | None = None
+    assertiveness: TraitScore | None = None
+    agreeableness: TraitScore | None = None
+    honesty: TraitScore | None = None
+    conformity: TraitScore | None = None
+    patience: TraitScore | None = None
+    impulsiveness: TraitScore | None = None
+    risk_tolerance: TraitScore | None = None
+    competitiveness: TraitScore | None = None
+    envy: TraitScore | None = None
+    aggression: TraitScore | None = None
+    trust: TraitScore | None = None
+    ambition: TraitScore | None = None
+    materialism: TraitScore | None = None
+    fairness: TraitScore | None = None
+    forgiveness: TraitScore | None = None
+    sociability: TraitScore | None = None
+
+    @model_validator(mode="after")
+    def is_not_empty(self) -> Self:
+        if not any(
+            getattr(self, name) is not None for name in type(self).model_fields
+        ):
+            raise ValueError("behavioral traits must not be empty")
+        return self
+
+
+class SocialStatusConfig(StrictModel):
+    label: ProfileText | None = None
+    roles: tuple[ProfileText, ...] = ()
+    standing: TraitScore | None = None
+
+    @model_validator(mode="after")
+    def is_not_empty(self) -> Self:
+        if self.label is None and not self.roles and self.standing is None:
+            raise ValueError("social status must not be empty")
+        return self
+
+
+class AgentProfileConfig(StrictModel):
+    identity: ProfileIdentityConfig | None = None
+    personality: ProfilePersonalityConfig | None = None
+    goals: tuple[ProfileText, ...] | None = None
+    beliefs: tuple[ProfileText, ...] | None = None
+    values: tuple[ProfileText, ...] | None = None
+    communication_preferences: CommunicationPreferencesConfig | None = None
+    behavioral_traits: BehavioralTraitsConfig | None = None
+    social_status: SocialStatusConfig | None = None
+    private_information: tuple[ProfileText, ...] | None = None
+
+    @model_validator(mode="after")
+    def sections_are_not_empty(self) -> Self:
+        if not any(
+            getattr(self, name) is not None for name in type(self).model_fields
+        ):
+            raise ValueError("profile must contain at least one section")
+        for name in ("goals", "beliefs", "values", "private_information"):
+            if name in self.model_fields_set and not getattr(self, name):
+                raise ValueError(f"profile {name.replace('_', ' ')} must not be empty")
+        return self
+
+
 class AgentConfig(StrictModel):
     id: Identifier
     model_ref: Identifier
     personality_ref: Identifier | None = None
+    profile_ref: Identifier | None = None
     cognition_interval: PositiveInt | None = None
 
 
@@ -86,6 +176,7 @@ class AgentPoolConfig(StrictModel):
     count: PositiveInt
     model_ref: Identifier
     personality_ref: Identifier | None = None
+    profile_ref: Identifier | None = None
     cognition_interval: PositiveInt | None = None
 
 
@@ -93,6 +184,7 @@ class ResolvedAgentConfig(StrictModel):
     id: Identifier
     model_ref: Identifier
     personality_ref: Identifier | None = None
+    profile_ref: Identifier | None = None
     pool_ref: Identifier | None = None
     cognition_interval: PositiveInt | None = None
 
@@ -210,6 +302,7 @@ class ScenarioConfig(StrictModel):
     providers: dict[Identifier, ProviderConfig]
     models: dict[Identifier, ModelConfig]
     personalities: dict[Identifier, PersonalityConfig] = Field(default_factory=dict)
+    profiles: dict[Identifier, AgentProfileConfig] = Field(default_factory=dict)
     agents: tuple[AgentConfig, ...] = ()
     agent_pools: tuple[AgentPoolConfig, ...] = ()
     actions: tuple[ActionConfig, ...]
@@ -261,6 +354,16 @@ class ScenarioConfig(StrictModel):
                 raise ValueError(
                     f"agent {agent.id!r} references unknown personality "
                     f"{agent.personality_ref!r}"
+                )
+            if agent.profile_ref is not None and agent.profile_ref not in self.profiles:
+                raise ValueError(
+                    f"agent {agent.id!r} references unknown profile "
+                    f"{agent.profile_ref!r}"
+                )
+            if agent.profile_ref is not None and agent.personality_ref is not None:
+                raise ValueError(
+                    f"agent {agent.id!r} cannot reference both a profile and a "
+                    "legacy personality"
                 )
 
         action_kinds = [action.kind for action in self.actions]
@@ -322,6 +425,7 @@ class ScenarioConfig(StrictModel):
                 id=agent.id,
                 model_ref=agent.model_ref,
                 personality_ref=agent.personality_ref,
+                profile_ref=agent.profile_ref,
                 cognition_interval=agent.cognition_interval,
             )
             for agent in self.agents
@@ -333,6 +437,7 @@ class ScenarioConfig(StrictModel):
                     id=f"{pool.id_prefix}-{index:0{width}d}",
                     model_ref=pool.model_ref,
                     personality_ref=pool.personality_ref,
+                    profile_ref=pool.profile_ref,
                     pool_ref=pool.id_prefix,
                     cognition_interval=pool.cognition_interval,
                 )

@@ -1,0 +1,67 @@
+schema_version: 1
+run: {id: rich-social-mock, seed: 31, ticks: 3}
+providers:
+  scripted:
+    kind: mock
+    decisions:
+      alice:
+        - {kind: say, parameters: {text: "I propose we conserve the commons."}}
+        - {kind: contribute, parameters: {amount: 1}}
+      bob:
+        - {kind: say, parameters: {text: "What return would conservation offer?"}}
+        - {kind: harvest, parameters: {amount: 1}}
+models:
+  shared: {provider_ref: scripted, model: fixed-decisions}
+profiles:
+  steward:
+    identity: {display_name: Alice, description: A trusted local steward.}
+    personality:
+      description: Calm, observant, and independently minded.
+      qualities: [deliberate, practical]
+    goals: [Keep the commons viable, Maintain personal security]
+    beliefs: [Concrete commitments are more useful than vague agreement]
+    values: [Fairness, Stewardship]
+    communication_preferences:
+      style: concise and proposal-oriented
+      preferences: [Avoid repeating settled points]
+    behavioral_traits:
+      generosity: 0.75
+      empathy: 0.8
+      assertiveness: 0.55
+      patience: 0.85
+      risk_tolerance: 0.25
+      fairness: 0.9
+      sociability: 0.65
+    social_status: {label: trusted, roles: [steward], standing: 0.75}
+    private_information: [Worries that the resource will collapse]
+  rival:
+    identity: {display_name: Bob, description: An ambitious newcomer.}
+    personality:
+      description: Competitive, skeptical, and energetic.
+      qualities: [direct, opportunistic]
+    goals: [Increase personal influence, Secure a strong resource position]
+    beliefs: [Visible results matter more than promises]
+    values: [Achievement, Independence]
+    communication_preferences: {style: probing and direct}
+    behavioral_traits:
+      greed: 0.7
+      selfishness: 0.65
+      assertiveness: 0.85
+      impulsiveness: 0.6
+      risk_tolerance: 0.8
+      competitiveness: 0.9
+      ambition: 0.9
+      sociability: 0.5
+    social_status: {label: newcomer, roles: [trader], standing: 0.35}
+agents:
+  - {id: alice, model_ref: shared, profile_ref: steward}
+  - {id: bob, model_ref: shared, profile_ref: rival}
+actions: [{kind: harvest}, {kind: contribute}, {kind: say}]
+environment:
+  kind: commons
+  initial_resource: 8
+  initial_endowment: 2
+  social: {message_max_length: 300, history_limit: 10, roster_limit: 10}
+memory: {kind: in_memory, recall_limit: 8, retention_limit: 16}
+scheduling: {kind: stable, interval: 1}
+storage: {kind: memory}

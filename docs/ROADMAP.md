@@ -37,6 +37,9 @@ build the HTTP API or Next.js frontend.
 
 ### M3-01: Rich Profiles and Behavioral Cognition
 
+**Status: Complete.** Implemented as additive schema-version-1 profile sections;
+legacy personality-only scenarios remain supported.
+
 - Add validated first-class profiles for identity, personality, goals, beliefs,
   values, communication preferences, broad numeric behavioral traits, social
   status, and optional private information.

@@ -55,6 +55,177 @@ class AgentPersonality:
         object.__setattr__(self, "traits", freeze_object(self.traits))
 
 
+def _validated_statements(label: str, values: Sequence[str]) -> tuple[str, ...]:
+    statements = tuple(values)
+    if any(not value.strip() for value in statements):
+        raise ValueError(f"agent profile {label} must not contain empty text")
+    return statements
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileIdentity:
+    display_name: str
+    description: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.display_name.strip():
+            raise ValueError("agent profile display name must not be empty")
+        if self.description is not None and not self.description.strip():
+            raise ValueError("agent profile identity description must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
+class ProfilePersonality:
+    description: str
+    qualities: Sequence[str] = ()
+
+    def __post_init__(self) -> None:
+        if not self.description.strip():
+            raise ValueError("agent profile personality description must not be empty")
+        object.__setattr__(
+            self, "qualities", _validated_statements("qualities", self.qualities)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileGoals:
+    statements: Sequence[str]
+
+    def __post_init__(self) -> None:
+        statements = _validated_statements("goals", self.statements)
+        if not statements:
+            raise ValueError("agent profile goals must not be empty")
+        object.__setattr__(self, "statements", statements)
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileBeliefs:
+    statements: Sequence[str]
+
+    def __post_init__(self) -> None:
+        statements = _validated_statements("beliefs", self.statements)
+        if not statements:
+            raise ValueError("agent profile beliefs must not be empty")
+        object.__setattr__(self, "statements", statements)
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileValues:
+    statements: Sequence[str]
+
+    def __post_init__(self) -> None:
+        statements = _validated_statements("values", self.statements)
+        if not statements:
+            raise ValueError("agent profile values must not be empty")
+        object.__setattr__(self, "statements", statements)
+
+
+@dataclass(frozen=True, slots=True)
+class CommunicationPreferences:
+    style: str | None = None
+    preferences: Sequence[str] = ()
+
+    def __post_init__(self) -> None:
+        if self.style is not None and not self.style.strip():
+            raise ValueError("agent profile communication style must not be empty")
+        preferences = _validated_statements(
+            "communication preferences", self.preferences
+        )
+        if self.style is None and not preferences:
+            raise ValueError(
+                "agent profile communication preferences must not be empty"
+            )
+        object.__setattr__(self, "preferences", preferences)
+
+
+@dataclass(frozen=True, slots=True)
+class BehavioralTraits:
+    generosity: float | None = None
+    greed: float | None = None
+    selfishness: float | None = None
+    empathy: float | None = None
+    assertiveness: float | None = None
+    agreeableness: float | None = None
+    honesty: float | None = None
+    conformity: float | None = None
+    patience: float | None = None
+    impulsiveness: float | None = None
+    risk_tolerance: float | None = None
+    competitiveness: float | None = None
+    envy: float | None = None
+    aggression: float | None = None
+    trust: float | None = None
+    ambition: float | None = None
+    materialism: float | None = None
+    fairness: float | None = None
+    forgiveness: float | None = None
+    sociability: float | None = None
+
+    def __post_init__(self) -> None:
+        values = tuple(
+            getattr(self, field_name) for field_name in self.__dataclass_fields__
+        )
+        if not any(value is not None for value in values):
+            raise ValueError("agent profile behavioral traits must not be empty")
+        if any(
+            value is not None and (isinstance(value, bool) or not 0 <= value <= 1)
+            for value in values
+        ):
+            raise ValueError("agent profile behavioral traits must be between 0 and 1")
+
+
+@dataclass(frozen=True, slots=True)
+class SocialStatus:
+    label: str | None = None
+    roles: Sequence[str] = ()
+    standing: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.label is not None and not self.label.strip():
+            raise ValueError("agent profile social status label must not be empty")
+        roles = _validated_statements("social status roles", self.roles)
+        if self.standing is not None and (
+            isinstance(self.standing, bool) or not 0 <= self.standing <= 1
+        ):
+            raise ValueError("agent profile social standing must be between 0 and 1")
+        if self.label is None and not roles and self.standing is None:
+            raise ValueError("agent profile social status must not be empty")
+        object.__setattr__(self, "roles", roles)
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateInformation:
+    statements: Sequence[str]
+
+    def __post_init__(self) -> None:
+        statements = _validated_statements("private information", self.statements)
+        if not statements:
+            raise ValueError("agent profile private information must not be empty")
+        object.__setattr__(self, "statements", statements)
+
+
+@dataclass(frozen=True, slots=True)
+class AgentProfile:
+    """Private, immutable, composable behavioral context for one agent."""
+
+    identity: ProfileIdentity | None = None
+    personality: ProfilePersonality | None = None
+    goals: ProfileGoals | None = None
+    beliefs: ProfileBeliefs | None = None
+    values: ProfileValues | None = None
+    communication: CommunicationPreferences | None = None
+    traits: BehavioralTraits | None = None
+    social_status: SocialStatus | None = None
+    private_information: PrivateInformation | None = None
+
+    def __post_init__(self) -> None:
+        if not any(
+            getattr(self, field_name) is not None
+            for field_name in self.__dataclass_fields__
+        ):
+            raise ValueError("agent profile must contain at least one section")
+
+
 @dataclass(frozen=True, slots=True)
 class ActionProposal:
     actor_id: AgentId

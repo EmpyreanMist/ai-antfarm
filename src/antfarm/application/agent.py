@@ -9,6 +9,7 @@ from antfarm.domain.models import (
     AgentId,
     AgentIdentity,
     AgentPersonality,
+    AgentProfile,
 )
 from antfarm.ports.models import (
     MalformedModelResponseError,
@@ -28,6 +29,7 @@ class ModelBackedAgent:
     provider: ModelProvider
     personality: AgentPersonality | None = None
     available_actions: tuple[JsonObject, ...] = ()
+    profile: AgentProfile | None = None
 
     async def decide(self, context: AgentContext) -> ActionProposal | None:
         try:
@@ -35,6 +37,7 @@ class ModelBackedAgent:
                 ModelRequest(
                     identity=AgentIdentity(id=self.id),
                     personality=self.personality,
+                    profile=self.profile,
                     observation=context.observation,
                     memories=context.memories,
                     available_actions=self.available_actions,
