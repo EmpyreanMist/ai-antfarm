@@ -86,6 +86,11 @@ descriptive state only and does not imply automatic accrual or market policy.
 
 ### M3-03: Deterministic Population and Runtime Resolution
 
+**Status: Complete.** Implemented with validated explicit, generated, and mixed
+population policies; seeded uniform trait/economic ranges; and an immutable
+application resolver that materializes ephemeral population, profile, model, and
+seed overrides before composition or durable run creation.
+
 - Support fully explicit populations, fully generated populations, and mixed
   populations with selective per-agent and per-field randomization.
 - Begin with deterministic local generation and seeded uniform numeric ranges for

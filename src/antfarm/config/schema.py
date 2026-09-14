@@ -216,6 +216,129 @@ class AgentPoolConfig(StrictModel):
     cognition_interval: PositiveInt | None = None
 
 
+class UniformTraitRangeConfig(StrictModel):
+    """Inclusive uniform range for a generated normalized trait."""
+
+    distribution: Literal["uniform"] = "uniform"
+    minimum: TraitScore = 0.0
+    maximum: TraitScore = 1.0
+
+    @model_validator(mode="after")
+    def bounds_are_ordered(self) -> Self:
+        if self.minimum > self.maximum:
+            raise ValueError("uniform trait range minimum must not exceed maximum")
+        return self
+
+
+class UniformNonNegativeIntRangeConfig(StrictModel):
+    """Inclusive uniform integer range for generated economic values."""
+
+    distribution: Literal["uniform"] = "uniform"
+    minimum: NonNegativeInt
+    maximum: NonNegativeInt
+
+    @model_validator(mode="after")
+    def bounds_are_ordered(self) -> Self:
+        if self.minimum > self.maximum:
+            raise ValueError("uniform integer range minimum must not exceed maximum")
+        return self
+
+
+class BehavioralTraitsRandomizationConfig(StrictModel):
+    """Select all traits or named trait fields for uniform generation."""
+
+    mode: Literal["all", "selected"] = "selected"
+    default: UniformTraitRangeConfig = Field(default_factory=UniformTraitRangeConfig)
+    generosity: UniformTraitRangeConfig | None = None
+    greed: UniformTraitRangeConfig | None = None
+    selfishness: UniformTraitRangeConfig | None = None
+    empathy: UniformTraitRangeConfig | None = None
+    assertiveness: UniformTraitRangeConfig | None = None
+    agreeableness: UniformTraitRangeConfig | None = None
+    honesty: UniformTraitRangeConfig | None = None
+    conformity: UniformTraitRangeConfig | None = None
+    patience: UniformTraitRangeConfig | None = None
+    impulsiveness: UniformTraitRangeConfig | None = None
+    risk_tolerance: UniformTraitRangeConfig | None = None
+    competitiveness: UniformTraitRangeConfig | None = None
+    envy: UniformTraitRangeConfig | None = None
+    aggression: UniformTraitRangeConfig | None = None
+    trust: UniformTraitRangeConfig | None = None
+    ambition: UniformTraitRangeConfig | None = None
+    materialism: UniformTraitRangeConfig | None = None
+    fairness: UniformTraitRangeConfig | None = None
+    forgiveness: UniformTraitRangeConfig | None = None
+    sociability: UniformTraitRangeConfig | None = None
+
+    @model_validator(mode="after")
+    def selected_mode_has_a_field(self) -> Self:
+        selected = any(
+            getattr(self, name) is not None
+            for name in BehavioralTraitsConfig.model_fields
+        )
+        if self.mode == "selected" and not selected:
+            raise ValueError("selected trait randomization requires at least one field")
+        return self
+
+
+class EconomicRandomizationConfig(StrictModel):
+    money: UniformNonNegativeIntRangeConfig | None = None
+    recurring_income: UniformNonNegativeIntRangeConfig | None = None
+    resources: dict[Identifier, UniformNonNegativeIntRangeConfig] = Field(
+        default_factory=dict
+    )
+
+    @model_validator(mode="after")
+    def is_not_empty(self) -> Self:
+        if self.money is None and self.recurring_income is None and not self.resources:
+            raise ValueError("economic randomization must contain at least one field")
+        return self
+
+
+class ProfileRandomizationConfig(StrictModel):
+    behavioral_traits: BehavioralTraitsRandomizationConfig | None = None
+    economics: EconomicRandomizationConfig | None = None
+
+    @model_validator(mode="after")
+    def is_not_empty(self) -> Self:
+        if self.behavioral_traits is None and self.economics is None:
+            raise ValueError("profile randomization must contain at least one section")
+        return self
+
+
+class GeneratedPopulationConfig(StrictModel):
+    id_prefix: Identifier
+    count: PositiveInt
+    model_ref: Identifier
+    personality_ref: Identifier | None = None
+    profile_ref: Identifier | None = None
+    cognition_interval: PositiveInt | None = None
+    randomize: ProfileRandomizationConfig | None = None
+
+
+class PopulationConfig(StrictModel):
+    """Declarative deterministic population generation policy."""
+
+    mode: Literal["explicit", "generated", "mixed"]
+    seed: int | None = None
+    generated: GeneratedPopulationConfig | None = None
+    randomize: ProfileRandomizationConfig | None = None
+    agents: dict[Identifier, ProfileRandomizationConfig] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def mode_matches_structure(self) -> Self:
+        has_randomization = self.randomize is not None or bool(self.agents)
+        if self.mode == "explicit" and (
+            self.generated is not None or has_randomization
+        ):
+            raise ValueError(
+                "explicit population mode does not support generation or randomization"
+            )
+        if self.mode == "generated" and self.generated is None:
+            raise ValueError("generated population mode requires generated settings")
+        return self
+
+
 class ResolvedAgentConfig(StrictModel):
     id: Identifier
     model_ref: Identifier
@@ -342,6 +465,7 @@ class ScenarioConfig(StrictModel):
     profiles: dict[Identifier, AgentProfileConfig] = Field(default_factory=dict)
     agents: tuple[AgentConfig, ...] = ()
     agent_pools: tuple[AgentPoolConfig, ...] = ()
+    population: PopulationConfig | None = None
     actions: tuple[ActionConfig, ...]
     environment: EnvironmentConfig
     memory: MemoryConfig
@@ -371,6 +495,21 @@ class ScenarioConfig(StrictModel):
         self._require_unique(
             "expanded agent identifiers", [agent.id for agent in expanded_agents]
         )
+        if self.population is not None:
+            if self.population.mode == "generated" and (
+                self.agents or self.agent_pools
+            ):
+                raise ValueError(
+                    "generated population mode cannot include explicit agents or pools"
+                )
+            unknown_randomized_agents = set(self.population.agents).difference(
+                agent.id for agent in expanded_agents
+            )
+            if unknown_randomized_agents:
+                names = ", ".join(sorted(unknown_randomized_agents))
+                raise ValueError(
+                    f"population randomization references unknown agents: {names}"
+                )
         if (
             self.run.active_agents is not None
             and self.run.active_agents > len(expanded_agents)
@@ -489,6 +628,20 @@ class ScenarioConfig(StrictModel):
                     cognition_interval=pool.cognition_interval,
                 )
                 for index in range(1, pool.count + 1)
+            )
+        generated = self.population.generated if self.population is not None else None
+        if generated is not None:
+            width = max(3, len(str(generated.count)))
+            expanded.extend(
+                ResolvedAgentConfig(
+                    id=f"{generated.id_prefix}-{index:0{width}d}",
+                    model_ref=generated.model_ref,
+                    personality_ref=generated.personality_ref,
+                    profile_ref=generated.profile_ref,
+                    pool_ref=generated.id_prefix,
+                    cognition_interval=generated.cognition_interval,
+                )
+                for index in range(1, generated.count + 1)
             )
         return tuple(sorted(expanded, key=lambda agent: agent.id))
 

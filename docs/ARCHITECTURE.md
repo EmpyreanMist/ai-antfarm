@@ -254,6 +254,14 @@ Rich profile and population resolution belongs at the domain/application boundar
 the domain defines validated profile, visibility, and resolved-population values;
 application services orchestrate deterministic generation and overrides. CLI,
 HTTP, and UI adapters only translate user input into those shared operations.
+Population policies have explicit, generated, or mixed modes. Numeric profile
+generation uses a local seeded random source and inclusive uniform ranges for
+selected or all behavioral traits and for non-negative money, recurring income,
+and named resources. Resolution expands pools, generates defaults, overlays
+authored profile values, and then applies ephemeral per-agent profile and model
+assignments. Its output contains only explicit agents and profiles and is validated
+before composition can create storage. A typed template-selection boundary is
+reserved for later deterministic catalogs; startup does not call an LLM.
 Private profile data, private memory, internal state, and explicitly observable
 public data remain distinct throughout resolution and cognition context building.
 Composition derives a minimal public-profile projection from validated visibility

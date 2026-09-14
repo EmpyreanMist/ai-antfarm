@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import TextIO, cast
+from typing import TextIO
 from uuid import uuid4
 
 from antfarm.adapters.models.ollama import OllamaModelPreflight
@@ -16,6 +16,7 @@ from antfarm.config import load_scenario
 from antfarm.config.schema import OpenAICompatibleProviderConfig, ScenarioConfig
 from antfarm.domain.json_values import JsonObject
 from antfarm.domain.models import AgentId, Event, RunLimit, Tick
+from antfarm.population import RuntimeOverrides, resolve_run_config
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +31,7 @@ class RunSummary:
 
 
 async def run_scenario(path: str | Path) -> RunSummary:
-    config = load_scenario(path)
+    config = resolve_run_config(load_scenario(path))
     simulation = compose(config)
     try:
         result = await simulation.engine.run(RunLimit(ticks=config.run.ticks))
@@ -53,7 +54,7 @@ async def run_continuous_scenario(
 ) -> RunSummary:
     """Run until cancellation without accumulating committed event batches."""
 
-    config = load_scenario(path)
+    config = resolve_run_config(load_scenario(path))
     simulation = compose(config)
     try:
         result = await ContinuousRunner(
@@ -82,30 +83,17 @@ def prepare_live_config(
     """Apply live-only overrides and revalidate the complete scenario."""
 
     source = load_scenario(path)
-    data = source.model_dump(mode="json")
-    run = cast(dict[str, object], data["run"])
     selected_count = active_agents
     if selected_count is None:
         selected_count = source.run.active_agents or len(source.expand_agents())
-    run["active_agents"] = selected_count
-    run["id"] = run_id or _fresh_run_id(source.run.id)
-    if model is not None:
-        _validate_runtime_model(model)
-        provisional = ScenarioConfig.model_validate(data)
-        active_model_refs = {
-            agent.model_ref for agent in provisional.active_agents()
-        }
-        models = cast(dict[str, dict[str, object]], data["models"])
-        for model_ref in active_model_refs:
-            model_config = provisional.models[model_ref]
-            provider = provisional.providers[model_config.provider_ref]
-            if not isinstance(provider, OpenAICompatibleProviderConfig):
-                raise ValueError(
-                    "runtime model override requires OpenAI-compatible "
-                    f"active models; {model_ref!r} uses {provider.kind!r}"
-                )
-            models[model_ref]["model"] = model
-    return ScenarioConfig.model_validate(data)
+    return resolve_run_config(
+        source,
+        RuntimeOverrides(
+            active_agents=selected_count,
+            model=model,
+            run_id=run_id or _fresh_run_id(source.run.id),
+        ),
+    )
 
 
 async def run_live_scenario(
@@ -191,13 +179,6 @@ async def run_live_scenario(
 def _fresh_run_id(base: str) -> str:
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
     return f"{base}-{timestamp}-{uuid4().hex[:8]}"
-
-
-def _validate_runtime_model(model: str) -> None:
-    if not model or model != model.strip():
-        raise ValueError("runtime model must be a non-empty trimmed value")
-    if any(ord(character) < 32 or 127 <= ord(character) <= 159 for character in model):
-        raise ValueError("runtime model must not contain control characters")
 
 
 async def _preflight_ollama(config: ScenarioConfig) -> None:
