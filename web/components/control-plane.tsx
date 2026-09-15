@@ -5,9 +5,11 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   Agent,
   eventStreamUrl,
+  GameMode,
   inspectRun,
   JsonValue,
-  listScenarios,
+  listModes,
+  listModeScenarios,
   Resolution,
   resolveScenario,
   RunState,
@@ -21,6 +23,8 @@ import {
 const TERMINAL = new Set(["completed", "stopped", "failed"]);
 
 export function ControlPlane() {
+  const [modes, setModes] = useState<GameMode[]>([]);
+  const [selectedModeId, setSelectedModeId] = useState("");
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [resolution, setResolution] = useState<Resolution | null>(null);
@@ -42,15 +46,15 @@ export function ControlPlane() {
   const terminalRun = useRef(false);
 
   const selected = scenarios.find((scenario) => scenario.id === selectedId);
+  const selectedMode = modes.find((item) => item.id === selectedModeId);
 
   useEffect(() => {
     let active = true;
-    listScenarios()
+    listModes()
       .then((items) => {
         if (!active) return;
-        setScenarios(items);
-        const featured = items.find((item) => item.featured) ?? items[0];
-        if (featured) setSelectedId(featured.id);
+        setModes(items);
+        if (items[0]) setSelectedModeId(items[0].id);
       })
       .catch((reason: unknown) => {
         if (active) setError(errorMessage(reason));
@@ -59,6 +63,24 @@ export function ControlPlane() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedModeId) return;
+    let active = true;
+    listModeScenarios(selectedModeId)
+      .then((items) => {
+        if (!active) return;
+        setScenarios(items);
+        const featured = items.find((item) => item.featured) ?? items[0];
+        setSelectedId(featured?.id ?? "");
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(errorMessage(reason));
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedModeId]);
 
   useEffect(() => {
     if (!selected) return;
@@ -195,7 +217,7 @@ export function ControlPlane() {
           <p className="eyebrow">AntFarm / minimum web control plane</p>
           <h1>Run a society.<br />Watch it become.</h1>
           <p className="lede">
-            Configure the existing Society mode, resolve its agents, and observe
+            Choose a game mode, resolve its agents, and observe
             only events committed by the authoritative simulation server.
           </p>
         </div>
@@ -212,8 +234,27 @@ export function ControlPlane() {
         <aside className="scenario-column">
           <div className="section-heading">
             <span>01</span>
-            <div><p>Choose</p><h2>Society scenario</h2></div>
+            <div><p>Choose</p><h2>Game mode</h2></div>
           </div>
+          <div className="mode-picker">
+            {modes.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                aria-pressed={selectedModeId === item.id}
+                onClick={() => setSelectedModeId(item.id)}
+              >
+                <strong>{item.name}</strong>
+                <span>{item.description}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mode-capabilities">
+            {selectedMode?.capabilities.map((capability) => (
+              <span key={capability}>{capability.replaceAll("_", " ")}</span>
+            ))}
+          </div>
+          <h3 className="scenario-label">Scenario templates</h3>
           <div className="scenario-list">
             {scenarios.map((scenario) => (
               <button

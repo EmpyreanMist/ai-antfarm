@@ -26,6 +26,7 @@ from antfarm.application.contracts import (
     ErrorCode,
     EventQuery,
     EventView,
+    ModeView,
     RunMode,
     RunState,
     RunStatus,
@@ -159,6 +160,24 @@ def create_app(
     @app.get(f"{API_PREFIX}/scenarios")
     async def list_scenarios() -> dict[str, object]:
         return {"items": [scenario.view() for scenario in runtime.catalog.list()]}
+
+    @app.get(f"{API_PREFIX}/modes")
+    async def list_modes() -> dict[str, object]:
+        modes = runtime.application.list_modes()
+        return {"items": [_mode_view(mode) for mode in modes]}
+
+    @app.get(f"{API_PREFIX}/modes/{{mode_id}}")
+    async def inspect_mode(mode_id: str) -> dict[str, object]:
+        return _mode_view(runtime.application.get_mode(mode_id))
+
+    @app.get(f"{API_PREFIX}/modes/{{mode_id}}/scenarios")
+    async def list_mode_scenarios(mode_id: str) -> dict[str, object]:
+        runtime.application.get_mode(mode_id)
+        return {
+            "items": [
+                scenario.view() for scenario in runtime.catalog.list(mode_id=mode_id)
+            ]
+        }
 
     @app.post(f"{API_PREFIX}/scenarios/{{scenario_id}}/resolve")
     async def resolve_scenario(
@@ -321,14 +340,35 @@ def _resolution_view(
     agents = runtime.application.inspect_resolved_agents(resolved)
     return {
         "resolution_id": resolution_id,
-        "scenario_id": scenario.definition.id,
-        "mode": "society",
+        "scenario_id": scenario.template.id,
+        "mode": scenario.mode.id,
         "run_id": resolved.config.run.id,
         "seed": resolved.config.run.seed,
         "ticks": resolved.config.run.ticks,
         "active_agent_count": len(resolved.config.active_agents()),
         "runtime_overrides": thaw_json(resolved.runtime_overrides),
         "agents": [_agent_view(agent) for agent in agents],
+    }
+
+
+def _mode_view(mode: ModeView) -> dict[str, object]:
+    return {
+        "id": mode.id,
+        "name": mode.name,
+        "description": mode.description,
+        "capabilities": list(mode.capabilities),
+        "configuration_hints": thaw_json(mode.configuration_hints),
+        "visualization_hints": thaw_json(mode.visualization_hints),
+        "templates": [
+            {
+                "id": template.id,
+                "name": template.name,
+                "description": template.description,
+                "runtime": template.runtime,
+                "featured": template.featured,
+            }
+            for template in mode.templates
+        ],
     }
 
 

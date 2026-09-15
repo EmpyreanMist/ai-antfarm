@@ -19,12 +19,14 @@ from antfarm.application.contracts import (
     EventPage,
     EventQuery,
     EventView,
+    ModeView,
     RunMode,
     RunState,
     RunStatus,
     RunView,
     SnapshotView,
 )
+from antfarm.application.modes import BuiltInModeRegistry
 from antfarm.composition import ComposedSimulation, compose
 from antfarm.config import load_scenario
 from antfarm.config.schema import ScenarioConfig, SqliteStorageConfig
@@ -95,9 +97,30 @@ class ApplicationRun:
 class AntFarmApplication:
     """Shared application entry point for CLI, tests, and future transports."""
 
-    def __init__(self, storage: Storage | None = None) -> None:
+    def __init__(
+        self,
+        storage: Storage | None = None,
+        *,
+        modes: BuiltInModeRegistry | None = None,
+    ) -> None:
         self._runs: dict[RunId, ApplicationRun] = {}
         self._query_storage = storage
+        self._modes = modes or BuiltInModeRegistry()
+
+    def list_modes(self) -> tuple[ModeView, ...]:
+        """Enumerate the closed set of curated simulation modes."""
+
+        return self._modes.list()
+
+    def get_mode(self, mode_id: str) -> ModeView:
+        """Return one mode or raise the stable not-found application error."""
+
+        return self._modes.get(mode_id)
+
+    def mode_template_source(self, mode_id: str, template_id: str) -> str:
+        """Resolve a registered template to its server-owned scenario resource."""
+
+        return self._modes.template_source(mode_id, template_id)
 
     def load_scenario(self, path: str | Path) -> ScenarioConfig:
         try:

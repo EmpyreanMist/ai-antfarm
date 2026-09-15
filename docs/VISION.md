@@ -130,9 +130,10 @@ run, watch committed events live, inspect agents and state, stop the run, and
 inspect its durable result. This vertical slice precedes the final generic custom
 simulation builder so the browser path can be tested and improved early.
 
-This minimum Society path is implemented in M5. The next product target is the
-small Game Mode architecture that makes Society the first explicit built-in mode
-without prematurely designing every possible mode.
+This minimum Society path is implemented in M5. M6 adds the small, closed Game
+Mode architecture and serves Society through transport-neutral discovery without
+prematurely designing every possible mode. The next product target is the generic
+custom simulation definition shared by application, API, and future builder.
 
 ## Long-Term Direction
 

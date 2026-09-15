@@ -12,7 +12,7 @@ The current execution topology is one Python 3.12+ process per application
 service, with one simulation engine and storage writer per managed run. The public
 surface is an installable library, CLI, local versioned HTTP/WebSocket API, and
 Next.js control plane. The web vertical slice invokes the stable application
-contracts directly and currently exposes the implemented Society experience.
+contracts directly and exposes Society through the closed built-in mode registry.
 Distributed workers and dynamic plugin discovery remain deferred.
 
 ## Product Model and Evolution Boundary
@@ -23,7 +23,7 @@ web-first simulation platform with two complementary authoring paths:
 - **Game/simulation modes** are curated experiences with coherent configuration,
   defaults, rules, capabilities, validation, presentation metadata, and optional
   visualization hints. The implemented social commons and rich-agent workflow
-  will become the first built-in **Society** mode. Future modes may address other
+  is the first built-in **Society** mode. Future modes may address other
   domains without making Society fields universal.
 - **Custom simulation definitions** are validated, versioned data that describe a
   simulation outside a built-in mode. They will eventually express entities and
@@ -69,10 +69,11 @@ The intended boundaries are:
 - **Domain/core simulation:** immutable agent and profile values, simulation time,
   environments, observations, validated actions, events, and rules. It owns no
   transport, persistence implementation, UI model, or provider wire format.
-- **Modes and custom definitions:** planned composition/configuration concepts
-  that select, constrain, or describe domain capabilities without taking engine
-  ownership. Society-specific profile and economic concepts can live here or in
-  reusable capabilities rather than becoming mandatory core fields.
+- **Modes and custom definitions:** the application-owned built-in mode registry
+  now selects and describes curated capabilities without taking engine ownership;
+  generic custom definitions remain planned. Society-specific profile and economic
+  concepts live as Society capability metadata or reusable values rather than
+  becoming mandatory core fields.
 - **Application/service layer:** scenario loading and resolution, runtime override
   handling, population inspection, run lifecycle orchestration, queries, and
   transport-neutral result/event DTOs. It is the single entry point for equivalent
@@ -85,14 +86,14 @@ The intended boundaries are:
 - **CLI:** parses terminal arguments, calls application services, and renders
   service results and committed events. It contains no alternative simulation
   workflow.
-- **HTTP/WebSocket API:** the implemented M5 transport adapter for application commands,
+- **HTTP/WebSocket API:** the implemented transport adapter for application commands,
   queries, and committed-event streaming. HTTP handles bounded control/query
   operations; WebSockets carry live updates where required. Transport concerns
   such as authentication, serialization, and connection lifecycle remain outside
   the domain.
 - **Next.js frontend:** the primary presentation client for selecting
   modes/scenarios, configuring, inspecting, starting, stopping, and observing
-  simulations through the API. M5 implements the Society slice; the generic
+  simulations through the API. M5/M6 implement the Society slice and mode discovery; the generic
   custom builder remains planned. Frontend state is not authoritative simulation
   state.
 

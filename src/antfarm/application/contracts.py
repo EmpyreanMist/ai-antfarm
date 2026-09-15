@@ -52,6 +52,36 @@ class RunStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class ScenarioTemplateView:
+    id: str
+    name: str
+    description: str
+    runtime: str
+    featured: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ModeView:
+    id: str
+    name: str
+    description: str
+    capabilities: tuple[str, ...]
+    configuration_hints: JsonObject
+    visualization_hints: JsonObject
+    templates: tuple[ScenarioTemplateView, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "capabilities", tuple(self.capabilities))
+        object.__setattr__(
+            self, "configuration_hints", freeze_object(self.configuration_hints)
+        )
+        object.__setattr__(
+            self, "visualization_hints", freeze_object(self.visualization_hints)
+        )
+        object.__setattr__(self, "templates", tuple(self.templates))
+
+
+@dataclass(frozen=True, slots=True)
 class RunState:
     run_id: str
     mode: RunMode

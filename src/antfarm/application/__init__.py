@@ -9,15 +9,18 @@ from antfarm.application.contracts import (
     EventPage,
     EventQuery,
     EventView,
+    ModeView,
     RunMode,
     RunState,
     RunStatus,
     RunSummary,
     RunView,
+    ScenarioTemplateView,
     SnapshotView,
 )
 from antfarm.application.engine import SimulationEngine, StepResult
 from antfarm.application.metrics import BuiltInMetricCollector
+from antfarm.application.modes import BuiltInModeRegistry
 from antfarm.application.scheduler import CognitionScheduler, StableScheduler
 
 __all__ = [
@@ -32,13 +35,16 @@ __all__ = [
     "EventPage",
     "EventQuery",
     "EventView",
+    "ModeView",
     "RunMode",
     "RunState",
     "RunStatus",
     "RunSummary",
     "RunView",
+    "ScenarioTemplateView",
     "SimulationEngine",
     "StableScheduler",
     "StepResult",
     "SnapshotView",
+    "BuiltInModeRegistry",
 ]

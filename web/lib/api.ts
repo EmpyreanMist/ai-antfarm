@@ -8,7 +8,7 @@ export type JsonValue =
 
 export type Scenario = {
   id: string;
-  mode: "society";
+  mode: string;
   name: string;
   description: string;
   runtime: "mock" | "ollama";
@@ -22,6 +22,21 @@ export type Scenario = {
   durable: boolean;
 };
 
+export type ScenarioTemplate = Pick<
+  Scenario,
+  "id" | "name" | "description" | "runtime" | "featured"
+>;
+
+export type GameMode = {
+  id: string;
+  name: string;
+  description: string;
+  capabilities: string[];
+  configuration_hints: Record<string, JsonValue>;
+  visualization_hints: Record<string, JsonValue>;
+  templates: ScenarioTemplate[];
+};
+
 export type Agent = {
   agent_id: string;
   model_ref: string;
@@ -33,7 +48,7 @@ export type Agent = {
 export type Resolution = {
   resolution_id: string;
   scenario_id: string;
-  mode: "society";
+  mode: string;
   run_id: string;
   seed: number;
   ticks: number;
@@ -88,8 +103,15 @@ const API_URL = (
   process.env.NEXT_PUBLIC_ANTFARM_API_URL ?? "http://127.0.0.1:8000/api/v1"
 ).replace(/\/$/, "");
 
-export async function listScenarios(): Promise<Scenario[]> {
-  const response = await request<{ items: Scenario[] }>("/scenarios");
+export async function listModes(): Promise<GameMode[]> {
+  const response = await request<{ items: GameMode[] }>("/modes");
+  return response.items;
+}
+
+export async function listModeScenarios(modeId: string): Promise<Scenario[]> {
+  const response = await request<{ items: Scenario[] }>(
+    `/modes/${encodeURIComponent(modeId)}/scenarios`,
+  );
   return response.items;
 }
 

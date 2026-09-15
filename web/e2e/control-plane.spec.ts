@@ -8,6 +8,11 @@ test("previews, runs, inspects, and safely stops the mock Society", async ({
   await expect(
     page.getByRole("heading", { name: "Run a society. Watch it become." }),
   ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Game mode" })).toBeVisible();
+  await expect(page.locator(".mode-picker button", { hasText: "Society" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await expect(page.getByRole("button", { name: /Live Society · Mock/ })).toHaveAttribute(
     "aria-pressed",
     "true",

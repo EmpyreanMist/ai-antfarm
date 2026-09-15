@@ -254,6 +254,12 @@ logic into TypeScript.
 
 ## M6: Game Mode Architecture
 
+**Status: Complete.** Implemented as a closed application-owned registry with
+immutable mode and scenario-template views. Society supplies its presentation,
+capability, configuration, and visualization hints through that registry; the
+FastAPI catalog and Next.js selector now consume the shared mode query. Existing
+schema-version-1 resolution and execution remain unchanged.
+
 **Outcome:** AntFarm has an explicit, transport-neutral representation for curated
 simulation/game modes, and the M5 Society experience is served through it without
 changing simulation results or making Society fields universal.
@@ -289,6 +295,10 @@ mutation into the frontend.
 
 ## M7: Generic Custom Simulation Definition
 
+**Outcome:** users and adapters can construct, validate, resolve, and execute a
+versioned custom simulation definition made only from data, without inheriting
+Society-specific fields or importing executable server code.
+
 Define a versioned, transport-independent representation for simulations that do
 not fit a built-in mode. Generalize only the domain/application seams required to
 represent typed state values, scope and ownership, visibility, actions,
@@ -302,6 +312,36 @@ capabilities, or the Society mode where evidence supports it; do not replace the
 engine, persistence lifecycle, application facade, or resolved-configuration
 model wholesale. Custom definitions remain data, not arbitrary imported or
 generated server code, and loading/resolution must not require an LLM.
+
+### M7 acceptance criteria
+
+- Define a strict versioned custom-definition schema with named entity types,
+  entities, typed initial state fields, action definitions, observation rules,
+  transition rules, activation/scheduling, termination, and storage/runtime
+  settings. Unknown fields, duplicate identifiers, invalid references, invalid
+  types, and contradictory rules fail before composition.
+- Support JSON-compatible scalar and collection state with explicit scope and
+  ownership. Visibility distinguishes public, owner-only, and internal values;
+  observations expose only permitted projections.
+- Provide a small declarative transition vocabulary sufficient to prove a useful
+  non-Society simulation. Transitions remain environment-owned and validated;
+  definitions cannot name Python imports, expressions, templates, shell commands,
+  or arbitrary executable code.
+- Permit deterministic entities that do not call an LLM as well as optional
+  model-backed entities through existing provider ports. A valid definition need
+  not contain agents, profiles, money, relationships, speech, or a physical map.
+- Resolve a custom definition into immutable application inputs and execute it
+  through the existing engine lifecycle, ordered events, atomic persistence,
+  cancellation, and query contracts. Preserve schema-version-1 Society scenarios
+  and stored-run compatibility.
+- Add one documented offline custom example outside the Society domain and cover
+  validation, deterministic replay of the same seed/input, visibility isolation,
+  rejected actions, persistence, and application-level inspection with focused
+  tests.
+
+**M7 non-goals:** the web builder, natural-language generation, arbitrary code,
+dynamic plugins, a universal visual editor, or rewriting working Society schema
+and execution paths.
 
 ## M8: Web Custom Simulation Builder
 
@@ -350,9 +390,8 @@ system may bypass environment/domain-owned validation and mutation.
   social/economic branches. M6/M7 should migrate these seams incrementally rather
   than growing cross-engine mode conditionals or rewriting known-good M3/M4 code.
 - M4 live subscriptions are process-local and expose committed events only;
-  durable cursor queries provide recovery. M5 must make backpressure,
-  reconnection, application lifetime, and run ownership explicit before treating
-  WebSockets as reliable transport.
+  M5 added bounded WebSocket buffering and durable cursor recovery, but restart
+  ownership and multi-process coordination remain deferred.
 - `AntFarmApplication` owns running tasks in memory while SQLite owns durable run
   data. Restart/resume and multi-process ownership are not implied by the current
   service contract and should not be accidentally promised by the first web UI.

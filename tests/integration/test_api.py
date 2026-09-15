@@ -41,7 +41,17 @@ def _wait_for_terminal(client: TestClient, run_id: str) -> dict[str, object]:
 
 def test_society_vertical_slice_resolves_runs_streams_and_inspects() -> None:
     for client in _client():
-        catalog = client.get("/api/v1/scenarios")
+        modes = client.get("/api/v1/modes")
+        assert modes.status_code == 200
+        society = modes.json()["items"][0]
+        assert society["id"] == "society"
+        assert "economics" in society["capabilities"]
+        assert {item["id"] for item in society["templates"]} >= {
+            "live-society-mock",
+            "society-manual",
+        }
+
+        catalog = client.get("/api/v1/modes/society/scenarios")
         assert catalog.status_code == 200
         ids = {item["id"] for item in catalog.json()["items"]}
         assert {"live-society-mock", "society-manual"}.issubset(ids)
@@ -124,6 +134,10 @@ def test_continuous_run_can_be_stopped_through_http() -> None:
 
 def test_api_maps_catalog_and_validation_failures_to_stable_errors() -> None:
     for client in _client():
+        missing_mode = client.get("/api/v1/modes/not-a-mode")
+        assert missing_mode.status_code == 404
+        assert missing_mode.json()["error"]["code"] == "not_found"
+
         missing = client.post("/api/v1/scenarios/not-a-file/resolve", json={})
         assert missing.status_code == 404
         assert missing.json()["error"]["code"] == "not_found"

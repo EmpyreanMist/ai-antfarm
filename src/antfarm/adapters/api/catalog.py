@@ -1,39 +1,31 @@
-"""Server-owned catalog of scenarios exposed to the web control plane."""
+"""Server-owned loading of application-registered scenario templates."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 
+from antfarm.application.contracts import ModeView, ScenarioTemplateView
 from antfarm.config.schema import ScenarioConfig, SqliteStorageConfig
 from antfarm.facade import AntFarmApplication
 
 
 @dataclass(frozen=True, slots=True)
-class CatalogDefinition:
-    id: str
-    filename: str
-    name: str
-    description: str
-    runtime: str
-    featured: bool = False
-
-
-@dataclass(frozen=True, slots=True)
 class CatalogScenario:
-    definition: CatalogDefinition
+    mode: ModeView
+    template: ScenarioTemplateView
     path: Path
     config: ScenarioConfig
 
     def view(self) -> dict[str, object]:
         agents = self.config.expand_agents()
         return {
-            "id": self.definition.id,
-            "mode": "society",
-            "name": self.definition.name,
-            "description": self.definition.description,
-            "runtime": self.definition.runtime,
-            "featured": self.definition.featured,
+            "id": self.template.id,
+            "mode": self.mode.id,
+            "name": self.template.name,
+            "description": self.template.description,
+            "runtime": self.template.runtime,
+            "featured": self.template.featured,
             "agent_count": len(agents),
             "default_active_agents": self.config.run.active_agents or len(agents),
             "seed": self.config.run.seed,
@@ -44,48 +36,8 @@ class CatalogScenario:
         }
 
 
-CATALOG_DEFINITIONS = (
-    CatalogDefinition(
-        id="live-society-mock",
-        filename="live-social-mock.yaml",
-        name="Live Society · Mock",
-        description="A deterministic ten-person commons with speech and actions.",
-        runtime="mock",
-        featured=True,
-    ),
-    CatalogDefinition(
-        id="society-manual",
-        filename="society-manual.yaml",
-        name="Authored Society",
-        description="Two richly configured agents with visible inequality.",
-        runtime="mock",
-    ),
-    CatalogDefinition(
-        id="society-randomized",
-        filename="society-randomized.yaml",
-        name="Generated Society",
-        description="A seeded population generated from trait and economic ranges.",
-        runtime="mock",
-    ),
-    CatalogDefinition(
-        id="society-mixed",
-        filename="society-mixed.yaml",
-        name="Mixed Society",
-        description="Authored and generated agents resolved into one population.",
-        runtime="mock",
-    ),
-    CatalogDefinition(
-        id="live-society-ollama",
-        filename="live-social-ollama.yaml",
-        name="Live Society · Ollama",
-        description="The interactive Society scenario backed by a local model.",
-        runtime="ollama",
-    ),
-)
-
-
 class ScenarioCatalog:
-    """Closed scenario catalog; identifiers never become filesystem paths."""
+    """Loaded templates from the closed application mode registry."""
 
     def __init__(
         self,
@@ -94,18 +46,25 @@ class ScenarioCatalog:
     ) -> None:
         self._items: dict[str, CatalogScenario] = {}
         root = scenario_directory.resolve()
-        for definition in CATALOG_DEFINITIONS:
-            path = (root / definition.filename).resolve()
-            if path.parent != root or not path.is_file():
-                continue
-            self._items[definition.id] = CatalogScenario(
-                definition=definition,
-                path=path,
-                config=application.load_scenario(path),
-            )
+        for mode in application.list_modes():
+            for template in mode.templates:
+                source = application.mode_template_source(mode.id, template.id)
+                path = (root / source).resolve()
+                if path.parent != root or not path.is_file():
+                    continue
+                self._items[template.id] = CatalogScenario(
+                    mode=mode,
+                    template=template,
+                    path=path,
+                    config=application.load_scenario(path),
+                )
 
-    def list(self) -> tuple[CatalogScenario, ...]:
-        return tuple(self._items.values())
+    def list(self, mode_id: str | None = None) -> tuple[CatalogScenario, ...]:
+        return tuple(
+            item
+            for item in self._items.values()
+            if mode_id is None or item.mode.id == mode_id
+        )
 
     def get(self, scenario_id: str) -> CatalogScenario | None:
         return self._items.get(scenario_id)

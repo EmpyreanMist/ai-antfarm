@@ -37,16 +37,19 @@ The foundation currently includes:
 - Stable transport-neutral run lifecycle, inspection, query, error, pagination,
   and committed-event subscription contracts
 - A versioned local HTTP/WebSocket API over those application contracts
+- An application-owned, closed Game Mode registry with Society templates and hints
 - A Next.js Society control plane for preview, live events, stop, and inspection
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, M4, and M5 are complete. See
+M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, M4, M5, and M6 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Web Control Plane
 
-M5 provides a local, trusted-operator web experience over the same application
-behavior used by the CLI. Start the API from the repository root:
+M5/M6 provide a local, trusted-operator web experience over the same application
+behavior used by the CLI. Society and its scenario templates are discovered
+through the transport-neutral Game Mode registry. Start the API from the
+repository root:
 
 ```console
 uv sync --dev
