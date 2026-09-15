@@ -1,5 +1,5 @@
-import { ControlPlane } from "@/components/control-plane";
+import { AppShell } from "@/components/app-shell";
 
 export default function Home() {
-  return <ControlPlane />;
+  return <AppShell />;
 }

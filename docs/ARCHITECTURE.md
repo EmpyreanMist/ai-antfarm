@@ -93,9 +93,9 @@ The intended boundaries are:
   the domain.
 - **Next.js frontend:** the primary presentation client for selecting
   modes/scenarios, configuring, inspecting, starting, stopping, and observing
-  simulations through the API. M5/M6 implement the Society slice and mode discovery; the generic
-  custom builder remains planned. Frontend state is not authoritative simulation
-  state.
+  simulations through the API. M5/M6 implement Society and mode discovery; M8
+  adds structured custom authoring over the M7 data contract. Frontend state and
+  browser-local drafts are not authoritative simulation state.
 
 ## Simulation Lifecycle
 
@@ -294,7 +294,7 @@ contracts.
 
 The closed Society schema remains the supported contract for the first web
 vertical slice. The M7 custom definition is a shared application/library format;
-M8 will expose that same format without making HTTP or React types authoritative.
+M8 exposes that same format without making HTTP or React types authoritative.
 Mode schemas may provide defaults and tighter constraints, but both mode and
 custom authoring must resolve and validate on the server before run creation. No
 authoring path may bypass action validation, visibility boundaries, or

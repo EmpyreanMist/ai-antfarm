@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This is the active plan from the completed M0-M7 baseline onward. The detailed
+This is the active plan from the completed M0-M8 baseline onward. The detailed
 M0-M2 implementation history is preserved unchanged in
 [`ROADMAP_old.md`](ROADMAP_old.md). Completed work is summarized here only where
 it establishes a dependency or constraint for future work.
@@ -353,6 +353,14 @@ and execution paths.
 
 ## M8: Web Custom Simulation Builder
 
+**Status: Complete.** Implemented with versioned custom validate/resolve/entity
+API operations and a separate browser workspace. The builder renders structured
+controls across every M7 definition section, saves a versioned local draft,
+imports/exports the shared JSON format, requires server validation and preview
+before launch, streams committed events, and inspects final custom state. Web
+authoring is restricted to deterministic, in-memory definitions so model-provider
+credentials and arbitrary server paths cannot enter through the browser.
+
 **Outcome:** a user can author, validate, preview, save locally in the browser,
 and run an M7 custom definition through structured web controls without editing
 YAML or bypassing server validation.
@@ -392,11 +400,41 @@ collaborative editing, dynamic plugins, or a generic visualization engine.
 
 ## M9: AI-Assisted Simulation Generation
 
+**Outcome:** a user can describe a simulation in natural language and receive a
+validated, editable M7 proposal in the M8 builder without granting the model an
+execution or mutation path.
+
 Translate a natural-language simulation description into a proposed structured
 M7 definition. Always show the validated proposal in the M8 builder and keep it
 editable before execution. Treat generation as configuration/schema generation:
 the model may not create, import, or execute arbitrary server code, bypass
 visibility, or bypass environment/domain-owned transition validation.
+
+### M9 acceptance criteria
+
+- Define a provider-neutral application command that accepts a bounded natural-
+  language description and requests one complete M7 definition through the
+  existing model-provider boundary. Keep prompt construction and malformed-output
+  handling outside the domain.
+- Validate generated output with `CustomSimulationDefinition` before returning it.
+  Reject prose, partial data, unknown fields, executable-looking extensions, and
+  invalid references with stable bounded errors; never start or persist a run as
+  part of generation.
+- Add an API operation and builder prompt panel that inserts a successful proposal
+  into the existing structured editor. The user must explicitly validate/preview
+  and start it through the normal M8 workflow.
+- Provide a deterministic offline generation adapter/fixture for automated tests
+  and an optional documented local-model path. No network, credentials, or model
+  runtime is required by the core test suite.
+- Preserve the submitted description and generation provenance only in client or
+  explicit application result data; do not log raw prompts/model output or expose
+  secrets in errors.
+- Cover successful generation-to-edit-to-run, malformed output, schema-invalid
+  output, provider failure, size limits, and confirmation boundaries with unit,
+  API, and Playwright tests.
+
+**M9 non-goals:** autonomous execution, arbitrary code generation, agent-written
+plugins, prompt-history accounts, model training, or replacing structured editing.
 
 ## M10: Visualization, Replay, and Experiment Analysis
 

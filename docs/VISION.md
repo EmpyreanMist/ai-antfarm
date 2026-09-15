@@ -133,8 +133,9 @@ simulation builder so the browser path can be tested and improved early.
 This minimum Society path is implemented in M5. M6 adds the small, closed Game
 Mode architecture and serves Society through transport-neutral discovery without
 prematurely designing every possible mode. M7 implements the generic custom
-simulation definition shared by application, API, and the future builder. The
-next product target is structured browser authoring over that shared definition.
+simulation definition and M8 exposes it through a structured browser builder. The
+next product target is AI-assisted proposal generation that always returns to the
+editable, validated definition workflow before execution.
 
 ## Long-Term Direction
 

@@ -36,3 +36,22 @@ test("previews, runs, inspects, and safely stops the mock Society", async ({
   await expect(page.getByText("stopped", { exact: true })).toBeVisible();
   await expect(page.locator(".state-panel pre")).toContainText('"resource"');
 });
+
+test("edits, validates, previews, and runs a custom definition", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Custom builder" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Define the rules. Run the world." }),
+  ).toBeVisible();
+  await page.getByLabel("run.ticks").fill("1");
+  await page.getByRole("button", { name: "Validate & preview" }).click();
+  await expect(page.getByText("worker-a", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: /Run custom simulation/ }).click();
+  await expect(page.locator(".custom-results .status")).toHaveText("completed");
+  await expect(page.locator(".custom-results .feed li")).toHaveCount(2);
+  await expect(page.locator(".custom-results .state-panel pre")).toContainText(
+    '"orders_remaining": 5',
+  );
+});

@@ -84,6 +84,34 @@ export type Snapshot = {
   metrics: Record<string, JsonValue>;
 };
 
+export type CustomDefinition = Record<string, JsonValue> & {
+  schema_version: number;
+  kind: "custom";
+  run: { id: string; seed: number; ticks: number };
+};
+
+export type CustomEntity = {
+  entity_id: string;
+  entity_type: string;
+  behavior: string | null;
+  configuration: Record<string, JsonValue>;
+  public: Record<string, JsonValue>;
+};
+
+export type CustomPreview = {
+  definition: CustomDefinition;
+  entities: CustomEntity[];
+};
+
+export type CustomResolution = CustomPreview & {
+  resolution_id: string;
+  kind: "custom";
+  run_id: string;
+  seed: number;
+  ticks: number;
+  runtime_overrides: Record<string, JsonValue>;
+};
+
 export type ResolveInput = {
   seed?: number;
   run_id?: string;
@@ -125,6 +153,28 @@ export function resolveScenario(
   });
 }
 
+export function getCustomStarter(): Promise<CustomDefinition> {
+  return request("/custom/starter");
+}
+
+export function validateCustom(
+  definition: CustomDefinition,
+): Promise<CustomPreview> {
+  return request("/custom/validate", {
+    method: "POST",
+    body: JSON.stringify(definition),
+  });
+}
+
+export function resolveCustom(
+  definition: CustomDefinition,
+): Promise<CustomResolution> {
+  return request("/custom/resolve", {
+    method: "POST",
+    body: JSON.stringify({ definition }),
+  });
+}
+
 export function startRun(input: StartInput): Promise<RunState> {
   return request("/runs", { method: "POST", body: JSON.stringify(input) });
 }
@@ -143,6 +193,18 @@ export async function inspectRun(runId: string): Promise<{
     request<Snapshot | null>(`/runs/${encoded}/snapshot`),
   ]);
   return { agents: agentPage.items, snapshot };
+}
+
+export async function inspectCustomRun(runId: string): Promise<{
+  entities: CustomEntity[];
+  snapshot: Snapshot | null;
+}> {
+  const encoded = encodeURIComponent(runId);
+  const [entityPage, snapshot] = await Promise.all([
+    request<{ items: CustomEntity[] }>(`/runs/${encoded}/entities?limit=1000`),
+    request<Snapshot | null>(`/runs/${encoded}/snapshot`),
+  ]);
+  return { entities: entityPage.items, snapshot };
 }
 
 export function eventStreamUrl(runId: string, after: number): string {

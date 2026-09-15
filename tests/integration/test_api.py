@@ -168,3 +168,53 @@ def test_ollama_preflight_failure_prevents_run_creation(
         assert response.status_code == 500
         assert response.json()["error"]["code"] == "execution_failed"
         assert "Ollama is unavailable" in response.json()["error"]["message"]
+
+
+def test_custom_definition_validates_resolves_runs_and_inspects() -> None:
+    for client in _client():
+        starter = client.get("/api/v1/custom/starter")
+        assert starter.status_code == 200
+        definition = starter.json()
+
+        validated = client.post("/api/v1/custom/validate", json=definition)
+        assert validated.status_code == 200, validated.text
+        worker = validated.json()["entities"][0]
+        assert worker["public"]["state"] == {
+            "completed": 0,
+            "skills": ["packing"],
+        }
+        assert worker["configuration"]["state"]["quota"] == 2
+
+        preview = client.post(
+            "/api/v1/custom/resolve",
+            json={"definition": definition, "run_id": "web-custom-test"},
+        )
+        assert preview.status_code == 200, preview.text
+        started = client.post(
+            "/api/v1/runs",
+            json={"resolution_id": preview.json()["resolution_id"]},
+        )
+        assert started.status_code == 201, started.text
+        completed = _wait_for_terminal(client, "web-custom-test")
+        assert completed["status"] == "completed"
+
+        entities = client.get("/api/v1/runs/web-custom-test/entities")
+        assert entities.status_code == 200
+        assert entities.json()["items"][1]["entity_id"] == "worker-b"
+        snapshot = client.get("/api/v1/runs/web-custom-test/snapshot")
+        assert snapshot.json()["world"]["world"]["orders_remaining"] == 0
+
+
+def test_web_custom_definition_rejects_unsafe_storage_and_unknown_fields() -> None:
+    for client in _client():
+        definition = client.get("/api/v1/custom/starter").json()
+        definition["unknown"] = True
+        invalid = client.post("/api/v1/custom/validate", json=definition)
+        assert invalid.status_code == 422
+        assert invalid.json()["error"]["code"] == "invalid_argument"
+
+        definition.pop("unknown")
+        definition["storage"] = {"kind": "sqlite", "path": "browser.db"}
+        unsafe = client.post("/api/v1/custom/validate", json=definition)
+        assert unsafe.status_code == 422
+        assert unsafe.json()["error"]["code"] == "invalid_argument"

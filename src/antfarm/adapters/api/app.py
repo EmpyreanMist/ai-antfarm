@@ -23,6 +23,7 @@ from antfarm.adapters.terminal import VISIBLE_EVENT_KINDS
 from antfarm.application.contracts import (
     AgentQuery,
     ApplicationError,
+    EntityQuery,
     ErrorCode,
     EventQuery,
     EventView,
@@ -32,10 +33,13 @@ from antfarm.application.contracts import (
     RunStatus,
 )
 from antfarm.config.schema import PopulationConfig
+from antfarm.custom.schema import CustomSimulationDefinition
 from antfarm.domain.json_values import JsonObject, thaw_json
 from antfarm.facade import (
     AntFarmApplication,
     ResolvedAgentInspection,
+    ResolvedCustomDefinition,
+    ResolvedEntityInspection,
     ResolvedRunConfiguration,
     StartRunCommand,
     StopRunCommand,
@@ -83,11 +87,18 @@ class StartRequest(ApiModel):
         return value
 
 
+class CustomResolveRequest(ApiModel):
+    definition: CustomSimulationDefinition
+    run_id: str | None = None
+    seed: int | None = None
+
+
 @dataclass(slots=True)
 class ApiRuntime:
     application: AntFarmApplication
     catalog: ScenarioCatalog
-    resolutions: dict[str, ResolvedRunConfiguration]
+    resolutions: dict[str, ResolvedRunConfiguration | ResolvedCustomDefinition]
+    custom_starter: CustomSimulationDefinition
     run_ids: set[str]
 
 
@@ -105,10 +116,14 @@ def create_app(
     if stream_buffer_size < 1:
         raise ValueError("stream_buffer_size must be positive")
     application = AntFarmApplication()
+    scenario_root = Path(scenario_directory)
     runtime = ApiRuntime(
         application=application,
-        catalog=ScenarioCatalog(Path(scenario_directory), application),
+        catalog=ScenarioCatalog(scenario_root, application),
         resolutions={},
+        custom_starter=application.load_custom_definition(
+            scenario_root / "custom-warehouse.yaml"
+        ),
         run_ids=set(),
     )
 
@@ -201,6 +216,37 @@ def create_app(
         runtime.resolutions[resolution_id] = resolved
         return _resolution_view(runtime, scenario, resolution_id, resolved)
 
+    @app.get(f"{API_PREFIX}/custom/starter")
+    async def custom_starter() -> dict[str, object]:
+        return runtime.custom_starter.model_dump(mode="json", exclude_none=True)
+
+    @app.post(f"{API_PREFIX}/custom/validate")
+    async def validate_custom(
+        definition: CustomSimulationDefinition,
+    ) -> dict[str, object]:
+        _validate_web_custom(definition)
+        return _custom_preview(runtime.application, definition)
+
+    @app.post(f"{API_PREFIX}/custom/resolve")
+    async def resolve_custom(request: CustomResolveRequest) -> dict[str, object]:
+        _validate_web_custom(request.definition)
+        resolved = runtime.application.resolve_custom(
+            request.definition,
+            run_id=request.run_id or _fresh_run_id(request.definition.run.id),
+            seed=request.seed,
+        )
+        resolution_id = uuid4().hex
+        runtime.resolutions[resolution_id] = resolved
+        return {
+            "resolution_id": resolution_id,
+            "kind": "custom",
+            "run_id": resolved.definition.run.id,
+            "seed": resolved.definition.run.seed,
+            "ticks": resolved.definition.run.ticks,
+            "runtime_overrides": thaw_json(resolved.runtime_overrides),
+            **_custom_preview(runtime.application, resolved.definition),
+        }
+
     @app.post(f"{API_PREFIX}/runs", status_code=201)
     async def start_run(request: StartRequest) -> dict[str, object]:
         resolved = runtime.resolutions.get(request.resolution_id)
@@ -210,14 +256,15 @@ def create_app(
                 "resolved preview was not found or was already used",
                 details={"resolution_id": request.resolution_id},
             )
-        try:
-            await preflight_ollama(resolved.config)
-        except ValueError as error:
-            raise ApplicationError(
-                ErrorCode.EXECUTION_FAILED,
-                str(error),
-                details={"runtime": "ollama"},
-            ) from error
+        if isinstance(resolved, ResolvedRunConfiguration):
+            try:
+                await preflight_ollama(resolved.config)
+            except ValueError as error:
+                raise ApplicationError(
+                    ErrorCode.EXECUTION_FAILED,
+                    str(error),
+                    details={"runtime": "ollama"},
+                ) from error
         state = runtime.application.start(
             StartRunCommand(
                 resolved=resolved,
@@ -260,6 +307,20 @@ def create_app(
         )
         return {
             "items": [_agent_view(agent) for agent in page.items],
+            "next_offset": page.next_offset,
+        }
+
+    @app.get(f"{API_PREFIX}/runs/{{run_id}}/entities")
+    async def inspect_entities(
+        run_id: str,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=1_000)] = 100,
+    ) -> dict[str, object]:
+        page = runtime.application.query_entities(
+            EntityQuery(run_id=run_id, offset=offset, limit=limit)
+        )
+        return {
+            "items": [_entity_view(entity) for entity in page.items],
             "next_offset": page.next_offset,
         }
 
@@ -380,6 +441,40 @@ def _agent_view(agent: ResolvedAgentInspection) -> dict[str, object]:
         "configuration": thaw_json(agent.configuration),
         "public": thaw_json(agent.public),
     }
+
+
+def _entity_view(entity: ResolvedEntityInspection) -> dict[str, object]:
+    return {
+        "entity_id": entity.entity_id,
+        "entity_type": entity.entity_type,
+        "behavior": entity.behavior,
+        "configuration": thaw_json(entity.configuration),
+        "public": thaw_json(entity.public),
+    }
+
+
+def _custom_preview(
+    application: AntFarmApplication,
+    definition: CustomSimulationDefinition,
+) -> dict[str, object]:
+    entities = application.inspect_resolved_entities(definition)
+    return {
+        "definition": definition.model_dump(mode="json", exclude_none=True),
+        "entities": [_entity_view(entity) for entity in entities],
+    }
+
+
+def _validate_web_custom(definition: CustomSimulationDefinition) -> None:
+    if definition.storage.kind != "memory":
+        raise ApplicationError(
+            ErrorCode.INVALID_ARGUMENT,
+            "web-authored custom simulations currently require memory storage",
+        )
+    if definition.model_refs:
+        raise ApplicationError(
+            ErrorCode.INVALID_ARGUMENT,
+            "web-authored custom simulations currently require deterministic behavior",
+        )
 
 
 def _run_state_view(state: RunState) -> dict[str, object]:

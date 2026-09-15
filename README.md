@@ -42,7 +42,7 @@ The foundation currently includes:
 - A Next.js Society control plane for preview, live events, stop, and inspection
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M7 are complete. See
+M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M8 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Web Control Plane
@@ -129,6 +129,18 @@ asyncio.run(main())
 The definition is data only: it cannot import Python or execute expressions,
 templates, shell commands, or hooks. Model-backed custom entities are optional
 and receive provider implementations through the existing application port.
+
+Select **Custom builder** in the web application to edit the same format through
+structured sections. The builder saves its draft in browser-local storage and can
+import/export JSON. Choose **Validate & preview** before **Run custom simulation**;
+the API rejects invalid definitions before creating a run. Browser-authored
+definitions currently use deterministic behavior and in-memory storage. The
+Playwright suite covers this complete flow alongside Society:
+
+```console
+cd web
+npm run test:e2e
+```
 
 ## Quick Start
 
