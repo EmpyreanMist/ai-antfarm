@@ -210,6 +210,31 @@ class AgentPage[T]:
 
 
 @dataclass(frozen=True, slots=True)
+class EntityQuery:
+    run_id: str
+    offset: int = 0
+    limit: int = DEFAULT_PAGE_SIZE
+
+    def __post_init__(self) -> None:
+        if not self.run_id:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "run_id is required")
+        if self.offset < 0:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT, "offset must not be negative"
+            )
+        _validate_page_size(self.limit)
+
+
+@dataclass(frozen=True, slots=True)
+class EntityPage[T]:
+    items: Sequence[T]
+    next_offset: int | None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "items", tuple(self.items))
+
+
+@dataclass(frozen=True, slots=True)
 class RunSummary:
     run_id: str
     ticks: int

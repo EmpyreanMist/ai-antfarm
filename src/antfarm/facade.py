@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event as StopEvent
@@ -15,6 +15,8 @@ from antfarm.application.contracts import (
     AgentPage,
     AgentQuery,
     ApplicationError,
+    EntityPage,
+    EntityQuery,
     ErrorCode,
     EventPage,
     EventQuery,
@@ -29,7 +31,13 @@ from antfarm.application.contracts import (
 from antfarm.application.modes import BuiltInModeRegistry
 from antfarm.composition import ComposedSimulation, compose
 from antfarm.config import load_scenario
-from antfarm.config.schema import ScenarioConfig, SqliteStorageConfig
+from antfarm.config.schema import ScenarioConfig, SqliteStorageConfig, StorageConfig
+from antfarm.custom.runtime import compose_custom
+from antfarm.custom.schema import (
+    CustomRunConfig,
+    CustomSimulationDefinition,
+    load_custom_definition,
+)
 from antfarm.domain.json_values import JsonObject, freeze_object, thaw_json
 from antfarm.domain.models import (
     AgentId,
@@ -46,6 +54,7 @@ from antfarm.population import (
     runtime_overrides_data,
 )
 from antfarm.ports.events import Subscription
+from antfarm.ports.models import ModelProvider
 from antfarm.ports.storage import Storage
 
 EventViewHandler = Callable[[EventView], None]
@@ -56,6 +65,14 @@ class ResolvedRunConfiguration:
     """A complete scenario paired with the runtime choices that produced it."""
 
     config: ScenarioConfig
+    runtime_overrides: JsonObject
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedCustomDefinition:
+    """A complete custom definition paired with ephemeral runtime choices."""
+
+    definition: CustomSimulationDefinition
     runtime_overrides: JsonObject
 
 
@@ -71,8 +88,24 @@ class ResolvedAgentInspection:
 
 
 @dataclass(frozen=True, slots=True)
+class ResolvedEntityInspection:
+    """Generic custom-entity view without Society/model assumptions."""
+
+    entity_id: str
+    entity_type: str
+    behavior: str | None
+    configuration: JsonObject
+    public: JsonObject
+
+
+@dataclass(frozen=True, slots=True)
 class StartRunCommand:
-    resolved: ResolvedRunConfiguration | ScenarioConfig
+    resolved: (
+        ResolvedRunConfiguration
+        | ResolvedCustomDefinition
+        | ScenarioConfig
+        | CustomSimulationDefinition
+    )
     mode: RunMode = RunMode.BOUNDED
     tick_seconds: float = 1.0
 
@@ -85,7 +118,7 @@ class StopRunCommand:
 @dataclass(slots=True)
 class ApplicationRun:
     run_id: RunId
-    resolved: ResolvedRunConfiguration
+    resolved: ResolvedRunConfiguration | ResolvedCustomDefinition
     simulation: ComposedSimulation
     stop_requested: StopEvent
     task: asyncio.Task[SimulationSnapshot]
@@ -102,10 +135,12 @@ class AntFarmApplication:
         storage: Storage | None = None,
         *,
         modes: BuiltInModeRegistry | None = None,
+        custom_model_providers: Mapping[str, ModelProvider] | None = None,
     ) -> None:
         self._runs: dict[RunId, ApplicationRun] = {}
         self._query_storage = storage
         self._modes = modes or BuiltInModeRegistry()
+        self._custom_model_providers = dict(custom_model_providers or {})
 
     def list_modes(self) -> tuple[ModeView, ...]:
         """Enumerate the closed set of curated simulation modes."""
@@ -122,6 +157,48 @@ class AntFarmApplication:
 
         return self._modes.template_source(mode_id, template_id)
 
+    def resolve_custom(
+        self,
+        source: CustomSimulationDefinition,
+        *,
+        run_id: str | None = None,
+        seed: int | None = None,
+    ) -> ResolvedCustomDefinition:
+        """Apply ephemeral run choices without mutating a custom definition."""
+
+        updates: dict[str, object] = {}
+        if run_id is not None:
+            updates["id"] = run_id
+        if seed is not None:
+            updates["seed"] = seed
+        try:
+            run_data = source.run.model_dump(mode="json")
+            run_data.update(updates)
+            run = CustomRunConfig.model_validate(run_data)
+            definition_data = source.model_dump(mode="json")
+            definition_data["run"] = run.model_dump(mode="json")
+            definition = CustomSimulationDefinition.model_validate(definition_data)
+            return ResolvedCustomDefinition(
+                definition=definition,
+                runtime_overrides=freeze_object(updates),
+            )
+        except ValueError as error:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                f"custom runtime overrides are invalid: {error}",
+            ) from error
+
+    def inspect_resolved_entities(
+        self,
+        resolved: ResolvedCustomDefinition | CustomSimulationDefinition,
+    ) -> tuple[ResolvedEntityInspection, ...]:
+        definition = (
+            resolved.definition
+            if isinstance(resolved, ResolvedCustomDefinition)
+            else resolved
+        )
+        return inspect_custom_entities(definition)
+
     def load_scenario(self, path: str | Path) -> ScenarioConfig:
         try:
             return load_scenario(path)
@@ -129,6 +206,18 @@ class AntFarmApplication:
             raise ApplicationError(
                 ErrorCode.INVALID_SCENARIO,
                 f"scenario could not be loaded: {error}",
+                details={"error_type": type(error).__name__},
+            ) from error
+
+    def load_custom_definition(
+        self, path: str | Path
+    ) -> CustomSimulationDefinition:
+        try:
+            return load_custom_definition(path)
+        except Exception as error:
+            raise ApplicationError(
+                ErrorCode.INVALID_SCENARIO,
+                f"custom definition could not be loaded: {error}",
                 details={"error_type": type(error).__name__},
             ) from error
 
@@ -161,7 +250,12 @@ class AntFarmApplication:
 
     def start_run(
         self,
-        resolved: ResolvedRunConfiguration | ScenarioConfig,
+        resolved: (
+            ResolvedRunConfiguration
+            | ResolvedCustomDefinition
+            | ScenarioConfig
+            | CustomSimulationDefinition
+        ),
         *,
         continuous: bool = False,
         tick_seconds: float = 1.0,
@@ -171,12 +265,20 @@ class AntFarmApplication:
         on_waiting: Callable[[Tick, float], None] | None = None,
         on_cognition_started: Callable[[Tick, AgentId, str], None] | None = None,
     ) -> ApplicationRun:
-        selected = (
-            resolved
-            if isinstance(resolved, ResolvedRunConfiguration)
-            else ResolvedRunConfiguration(resolved, freeze_object({}))
-        )
-        run_id = RunId(selected.config.run.id)
+        if isinstance(resolved, ScenarioConfig):
+            selected: ResolvedRunConfiguration | ResolvedCustomDefinition = (
+                ResolvedRunConfiguration(resolved, freeze_object({}))
+            )
+        elif isinstance(resolved, CustomSimulationDefinition):
+            selected = ResolvedCustomDefinition(resolved, freeze_object({}))
+        else:
+            selected = resolved
+        if isinstance(selected, ResolvedRunConfiguration):
+            run_id = RunId(selected.config.run.id)
+            ticks = selected.config.run.ticks
+        else:
+            run_id = RunId(selected.definition.run.id)
+            ticks = selected.definition.run.ticks
         if run_id in self._runs:
             raise ApplicationError(
                 ErrorCode.CONFLICT,
@@ -188,16 +290,23 @@ class AntFarmApplication:
                 ErrorCode.INVALID_ARGUMENT,
                 "tick_seconds must be a finite positive number",
             )
-        simulation = compose(
-            selected.config,
-            on_cognition_started=on_cognition_started,
-            runtime_overrides=selected.runtime_overrides,
-        )
+        if isinstance(selected, ResolvedRunConfiguration):
+            simulation = compose(
+                selected.config,
+                on_cognition_started=on_cognition_started,
+                runtime_overrides=selected.runtime_overrides,
+            )
+        else:
+            simulation = compose_custom(
+                selected.definition,
+                model_providers=self._custom_model_providers,
+                runtime_overrides=selected.runtime_overrides,
+            )
         stop_requested = StopEvent()
         task = asyncio.create_task(
             self._execute(
                 simulation,
-                selected.config,
+                ticks,
                 stop_requested,
                 continuous=continuous,
                 tick_seconds=tick_seconds,
@@ -306,6 +415,16 @@ class AntFarmApplication:
         next_offset = end if end < len(agents) else None
         return AgentPage(items=items, next_offset=next_offset)
 
+    def query_entities(
+        self, query: EntityQuery
+    ) -> EntityPage[ResolvedEntityInspection]:
+        self.query_run(query.run_id)
+        entities = self.read_entities(query.run_id)
+        end = query.offset + query.limit
+        items = entities[query.offset:end]
+        next_offset = end if end < len(entities) else None
+        return EntityPage(items=items, next_offset=next_offset)
+
     def query_snapshot(self, run_id: RunId | str) -> SnapshotView | None:
         self.query_run(run_id)
         snapshot = self.read_snapshot(run_id)
@@ -354,10 +473,13 @@ class AntFarmApplication:
                 )
             return self._query_storage.read_run(selected)
         if (
-            isinstance(handle.resolved.config.storage, SqliteStorageConfig)
+            isinstance(_resolved_storage(handle.resolved), SqliteStorageConfig)
             and handle.task.done()
         ):
-            with SQLiteStorage(handle.resolved.config.storage.path) as storage:
+            storage_config = _resolved_storage(handle.resolved)
+            if not isinstance(storage_config, SqliteStorageConfig):
+                raise RuntimeError("resolved SQLite storage changed unexpectedly")
+            with SQLiteStorage(storage_config.path) as storage:
                 return storage.read_run(selected)
         return handle.simulation.storage.read_run(selected)
 
@@ -372,8 +494,29 @@ class AntFarmApplication:
             raise TypeError("stored scenario must be an object")
         scenario.pop("active_agent_ids", None)
         scenario.pop("expanded_agents", None)
+        if scenario.get("kind") == "custom":
+            definition = CustomSimulationDefinition.model_validate(scenario)
+            return tuple(
+                _entity_as_agent(entity)
+                for entity in inspect_custom_entities(definition)
+            )
         config = ScenarioConfig.model_validate(scenario)
         return inspect_resolved_agents(config)
+
+    def read_entities(
+        self, run_id: RunId | str
+    ) -> tuple[ResolvedEntityInspection, ...]:
+        stored = self.read_run(run_id)
+        if stored is None:
+            return ()
+        raw = thaw_json(stored.scenario)
+        if not isinstance(raw, dict) or raw.get("kind") != "custom":
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT,
+                "run does not contain a custom simulation definition",
+                details={"run_id": str(run_id)},
+            )
+        return inspect_custom_entities(CustomSimulationDefinition.model_validate(raw))
 
     def read_snapshot(self, run_id: RunId | str) -> SimulationSnapshot | None:
         selected = RunId(str(run_id))
@@ -386,10 +529,13 @@ class AntFarmApplication:
             checkpoint = self._query_storage.load_latest(selected)
             return checkpoint.snapshot if checkpoint is not None else None
         if (
-            isinstance(handle.resolved.config.storage, SqliteStorageConfig)
+            isinstance(_resolved_storage(handle.resolved), SqliteStorageConfig)
             and handle.task.done()
         ):
-            with SQLiteStorage(handle.resolved.config.storage.path) as storage:
+            storage_config = _resolved_storage(handle.resolved)
+            if not isinstance(storage_config, SqliteStorageConfig):
+                raise RuntimeError("resolved SQLite storage changed unexpectedly")
+            with SQLiteStorage(storage_config.path) as storage:
                 checkpoint = storage.load_latest(selected)
         else:
             checkpoint = handle.simulation.storage.load_latest(selected)
@@ -405,10 +551,13 @@ class AntFarmApplication:
                 )
             return tuple(self._query_storage.read_events(selected, after=after))
         if (
-            isinstance(handle.resolved.config.storage, SqliteStorageConfig)
+            isinstance(_resolved_storage(handle.resolved), SqliteStorageConfig)
             and handle.task.done()
         ):
-            with SQLiteStorage(handle.resolved.config.storage.path) as storage:
+            storage_config = _resolved_storage(handle.resolved)
+            if not isinstance(storage_config, SqliteStorageConfig):
+                raise RuntimeError("resolved SQLite storage changed unexpectedly")
+            with SQLiteStorage(storage_config.path) as storage:
                 return tuple(storage.read_events(selected, after=after))
         return tuple(handle.simulation.storage.read_events(selected, after=after))
 
@@ -435,10 +584,13 @@ class AntFarmApplication:
                 )
             )
         if (
-            isinstance(handle.resolved.config.storage, SqliteStorageConfig)
+            isinstance(_resolved_storage(handle.resolved), SqliteStorageConfig)
             and handle.task.done()
         ):
-            with SQLiteStorage(handle.resolved.config.storage.path) as storage:
+            storage_config = _resolved_storage(handle.resolved)
+            if not isinstance(storage_config, SqliteStorageConfig):
+                raise RuntimeError("resolved SQLite storage changed unexpectedly")
+            with SQLiteStorage(storage_config.path) as storage:
                 return tuple(
                     storage.read_events(
                         selected,
@@ -493,7 +645,7 @@ class AntFarmApplication:
     @staticmethod
     async def _execute(
         simulation: ComposedSimulation,
-        config: ScenarioConfig,
+        ticks: int,
         stop_requested: StopEvent,
         *,
         continuous: bool,
@@ -517,9 +669,7 @@ class AntFarmApplication:
                     on_waiting=on_waiting,
                 ).run()
                 return continuous_result.snapshot
-            bounded_result = await simulation.engine.run(
-                RunLimit(ticks=config.run.ticks)
-            )
+            bounded_result = await simulation.engine.run(RunLimit(ticks=ticks))
             return bounded_result.snapshot
         except asyncio.CancelledError:
             return simulation.engine.snapshot()
@@ -604,3 +754,55 @@ def inspect_resolved_agents(
             )
         )
     return tuple(inspections)
+
+
+def inspect_custom_entities(
+    definition: CustomSimulationDefinition,
+) -> tuple[ResolvedEntityInspection, ...]:
+    """Project custom entities without treating their fields as Society data."""
+
+    inspections: list[ResolvedEntityInspection] = []
+    for entity in definition.entities:
+        entity_type = definition.entity_types[entity.type]
+        public_state = {
+            name: value
+            for name, value in entity.state.items()
+            if entity_type.fields[name].visibility == "public"
+        }
+        behavior = entity.behavior
+        behavior_kind = (
+            None if behavior is None else behavior.kind
+        )
+        inspections.append(
+            ResolvedEntityInspection(
+                entity_id=entity.id,
+                entity_type=entity.type,
+                behavior=behavior_kind,
+                configuration=freeze_object(
+                    entity.model_dump(mode="json", exclude_none=True)
+                ),
+                public=freeze_object(
+                    {"id": entity.id, "type": entity.type, "state": public_state}
+                ),
+            )
+        )
+    return tuple(inspections)
+
+
+def _entity_as_agent(entity: ResolvedEntityInspection) -> ResolvedAgentInspection:
+    behavior = entity.behavior or "inert"
+    return ResolvedAgentInspection(
+        agent_id=entity.entity_id,
+        model_ref=behavior,
+        model=behavior,
+        configuration=entity.configuration,
+        public=entity.public,
+    )
+
+
+def _resolved_storage(
+    resolved: ResolvedRunConfiguration | ResolvedCustomDefinition,
+) -> StorageConfig:
+    if isinstance(resolved, ResolvedRunConfiguration):
+        return resolved.config.storage
+    return resolved.definition.storage

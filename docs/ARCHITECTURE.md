@@ -39,12 +39,12 @@ definition exposes them directly. Money, wealth, occupation, reputation,
 relationships, groups, and even a physical environment are optional capabilities,
 not required AntFarm primitives.
 
-This section describes target direction. The implemented schema-version-1 model
-is still a closed configuration with required agents/models, one selected
+Schema-version-1 Society remains a closed configuration with required agents/models, one selected
 environment, fixed action families, scheduling, memory, and storage. Its rich
 profile, economy, visibility, and social fields are implemented Society
-capabilities to retain and migrate incrementally, not evidence that the generic
-custom-definition contract already exists.
+capabilities, not generic custom state. M7 implements custom definitions as a
+separate versioned data contract with typed world/entity fields and declarative
+transitions; it does not rewrite the Society schema.
 
 ## Target Application Topology
 
@@ -70,10 +70,10 @@ The intended boundaries are:
   environments, observations, validated actions, events, and rules. It owns no
   transport, persistence implementation, UI model, or provider wire format.
 - **Modes and custom definitions:** the application-owned built-in mode registry
-  now selects and describes curated capabilities without taking engine ownership;
-  generic custom definitions remain planned. Society-specific profile and economic
-  concepts live as Society capability metadata or reusable values rather than
-  becoming mandatory core fields.
+  selects and describes curated capabilities without taking engine ownership.
+  The implemented custom-definition schema composes typed state and declarative
+  transitions through an environment adapter into the same engine. Society-specific
+  profile and economic concepts remain optional Society capabilities.
 - **Application/service layer:** scenario loading and resolution, runtime override
   handling, population inspection, run lifecycle orchestration, queries, and
   transport-neutral result/event DTOs. It is the single entry point for equivalent
@@ -282,13 +282,23 @@ The currently implemented versioned `ScenarioConfig` contains:
 
 Provider secrets are never embedded in scenarios. Configuration refers to environment-variable names. Component kinds resolve through a closed registry in the composition root; scenario files cannot name arbitrary Python imports.
 
-This closed schema remains the supported contract for the implemented first web
-vertical slice. A later generic custom simulation definition will be a shared
-domain/application format usable by web, CLI, and library callers; it must not be
-owned by HTTP or React types. Mode schemas may provide defaults and tighter
-constraints, but both mode and custom authoring must resolve and validate on the
-server before run creation. No authoring path may bypass action validation,
-visibility boundaries, or environment/domain-owned mutation.
+M7 adds a separate `CustomSimulationDefinition` rather than weakening this
+contract. It contains typed world fields, entity types and instances, field
+visibility, deterministic or model-backed behavior selection, typed actions,
+constraints, set/add transition effects, interval activation, tick termination,
+observability, and storage. The declarative environment alone mutates custom
+state. Model implementations are injected through the existing provider port and
+are never named as importable code. Both formats persist their normalized source
+with the run and use the same engine, event, checkpoint, and application-query
+contracts.
+
+The closed Society schema remains the supported contract for the first web
+vertical slice. The M7 custom definition is a shared application/library format;
+M8 will expose that same format without making HTTP or React types authoritative.
+Mode schemas may provide defaults and tighter constraints, but both mode and
+custom authoring must resolve and validate on the server before run creation. No
+authoring path may bypass action validation, visibility boundaries, or
+environment/domain-owned mutation.
 
 A caller may derive a validated run configuration from a loaded scenario by
 applying ephemeral runtime choices such as a seed, population settings, profile
@@ -397,6 +407,7 @@ src/antfarm/
     storage/       # SQLite implementation
     api/           # Versioned FastAPI and WebSocket transport adapter
   config/          # Strict schema, YAML loader, composition registry
+  custom/          # Data-only custom-definition schema and runtime adapter
   cli.py            # Thin application-service client and terminal renderer
 web/                # Next.js control plane; API client only
 scenarios/examples/

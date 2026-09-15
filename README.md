@@ -38,10 +38,11 @@ The foundation currently includes:
   and committed-event subscription contracts
 - A versioned local HTTP/WebSocket API over those application contracts
 - An application-owned, closed Game Mode registry with Society templates and hints
+- Strict data-only custom definitions with typed state, visibility, and transitions
 - A Next.js Society control plane for preview, live events, stop, and inspection
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, M4, M5, and M6 are complete. See
+M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M7 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Web Control Plane
@@ -97,6 +98,37 @@ and uses an installed Google Chrome. CI installs and uses its own Chromium:
 cd web
 npm run test:e2e
 ```
+
+## Custom Simulations
+
+M7 adds a strict, versioned format for simulations that do not inherit Society
+concepts. The [warehouse example](scenarios/examples/custom-warehouse.yaml) uses
+deterministic workers, typed world/entity state, public/owner/internal visibility,
+validated constraints, and declarative transitions without an LLM.
+
+Custom definitions load and run through the application API:
+
+```python
+import asyncio
+
+from antfarm.facade import AntFarmApplication, StartRunCommand
+
+async def main() -> None:
+    application = AntFarmApplication()
+    definition = application.load_custom_definition(
+        "scenarios/examples/custom-warehouse.yaml"
+    )
+    resolved = application.resolve_custom(definition, run_id="warehouse-demo")
+    state = application.start(StartRunCommand(resolved))
+    snapshot = await application.wait_run(state.run_id)
+    print(snapshot.world)
+
+asyncio.run(main())
+```
+
+The definition is data only: it cannot import Python or execute expressions,
+templates, shell commands, or hooks. Model-backed custom entities are optional
+and receive provider implementations through the existing application port.
 
 ## Quick Start
 

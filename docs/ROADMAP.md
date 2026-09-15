@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This is the active plan from the completed M0-M5 baseline onward. The detailed
+This is the active plan from the completed M0-M7 baseline onward. The detailed
 M0-M2 implementation history is preserved unchanged in
 [`ROADMAP_old.md`](ROADMAP_old.md). Completed work is summarized here only where
 it establishes a dependency or constraint for future work.
@@ -295,6 +295,14 @@ mutation into the frontend.
 
 ## M7: Generic Custom Simulation Definition
 
+**Status: Complete.** Implemented as a separate strict data schema and a
+declarative environment composed into the existing engine. Custom definitions
+support typed scalar/collection state, public/owner/internal visibility,
+deterministic or injected-model entity behavior, typed actions, constraints,
+set/add transitions, interval activation, tick termination, in-memory or SQLite
+storage, resolution overrides, and application inspection. The offline warehouse
+example proves a non-Society workflow without an LLM.
+
 **Outcome:** users and adapters can construct, validate, resolve, and execute a
 versioned custom simulation definition made only from data, without inheriting
 Society-specific fields or importing executable server code.
@@ -345,12 +353,42 @@ and execution paths.
 
 ## M8: Web Custom Simulation Builder
 
+**Outcome:** a user can author, validate, preview, save locally in the browser,
+and run an M7 custom definition through structured web controls without editing
+YAML or bypassing server validation.
+
 Expose the M7 definition through structured browser forms/editors. Users can
 define and edit entities and types, state, actions, observations, visibility,
 rules/constraints, model assignments, activation, and termination without writing
 YAML. Provide server-backed validation, clear errors, and resolved previews before
 execution. The same definition remains usable through non-web application/library
 entry points. A visual node editor is not required for the first builder.
+
+### M8 acceptance criteria
+
+- Add versioned API operations to validate a complete custom definition, resolve
+  ephemeral run choices, preview entities and visibility projections, and start
+  it through the M7 application path. Return stable M4-style errors and never
+  persist a run for invalid input.
+- Add a Custom mode entry alongside built-in modes without pretending it is a
+  built-in scenario template. Preserve the M6 Society selection and all M5 run,
+  stream, stop, and inspection behavior.
+- Provide structured editors for run settings, entity types and fields, entities
+  and initial state, actions/parameters, constraints/effects, activation,
+  termination, and storage. JSON editing may supplement complex subsections but
+  cannot be the only authoring experience.
+- Show server validation errors at the relevant section and provide a resolved
+  preview before launch. Public projections must not expose owner-only or internal
+  values, while the configuring user can review the complete authored definition.
+- Keep browser drafts locally and support import/export of the same versioned data
+  format used by Python callers. Do not introduce server-side arbitrary file paths
+  or executable extensions.
+- Cover a complete non-Society builder journey with Playwright: edit the provided
+  starter, validate, preview, run, observe committed events/state, and inspect the
+  completed result. Keep all automated acceptance offline and deterministic.
+
+**M8 non-goals:** a node editor, AI generation, accounts/cloud persistence,
+collaborative editing, dynamic plugins, or a generic visualization engine.
 
 ## M9: AI-Assisted Simulation Generation
 
@@ -387,8 +425,9 @@ system may bypass environment/domain-owned validation and mutation.
   by M7.
 - Schema validation, the composition root, resolved-agent inspection, and some
   observation/profile projection contain explicit counter/commons and
-  social/economic branches. M6/M7 should migrate these seams incrementally rather
-  than growing cross-engine mode conditionals or rewriting known-good M3/M4 code.
+  social/economic branches. M6/M7 isolated new mode/custom contracts without
+  rewriting them; future capability work should migrate these seams incrementally
+  rather than growing cross-engine conditionals.
 - M4 live subscriptions are process-local and expose committed events only;
   M5 added bounded WebSocket buffering and durable cursor recovery, but restart
   ownership and multi-process coordination remain deferred.

@@ -1,0 +1,67 @@
+schema_version: 1
+kind: custom
+run:
+  id: custom-warehouse
+  seed: 31
+  ticks: 2
+entity_types:
+  worker:
+    fields:
+      completed: {type: integer, visibility: public}
+      quota: {type: integer, visibility: owner}
+      internal_code: {type: string, visibility: internal}
+      skills: {type: array, visibility: public}
+entities:
+  - id: worker-a
+    type: worker
+    state: {completed: 0, quota: 2, internal_code: alpha, skills: [packing]}
+    behavior:
+      kind: deterministic
+      repeat: true
+      actions:
+        - kind: process
+          parameters: {amount: 2}
+  - id: worker-b
+    type: worker
+    state: {completed: 0, quota: 3, internal_code: beta, skills: [sorting]}
+    behavior:
+      kind: deterministic
+      repeat: true
+      actions:
+        - kind: process
+          parameters: {amount: 3}
+world_fields:
+  orders_remaining: {type: integer, visibility: public}
+  audit_note: {type: string, visibility: internal}
+world_state:
+  orders_remaining: 10
+  audit_note: internal-only
+actions:
+  process:
+    description: Complete a bounded number of warehouse orders.
+    actor_types: [worker]
+    parameters:
+      amount: {type: integer}
+    constraints:
+      - left: {scope: actor, field: quota}
+        operator: gte
+        right: {source: parameter, parameter: amount}
+      - left: {scope: world, field: orders_remaining}
+        operator: gte
+        right: {source: parameter, parameter: amount}
+    effects:
+      - target: {scope: world, field: orders_remaining}
+        operation: add
+        value: {source: parameter, parameter: amount, multiplier: -1}
+      - target: {scope: actor, field: completed}
+        operation: add
+        value: {source: parameter, parameter: amount}
+activation:
+  kind: interval
+  interval: 1
+termination: {kind: ticks}
+observability:
+  event_detail: all
+  include_model_io: false
+  event_buffer_limit: 100
+storage: {kind: memory}
