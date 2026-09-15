@@ -44,6 +44,11 @@ test("edits, validates, previews, and runs a custom definition", async ({ page }
   await expect(
     page.getByRole("heading", { name: "Define the rules. Run the world." }),
   ).toBeVisible();
+  await page.getByLabel("Simulation description").fill(
+    "Workers process a queue of warehouse orders.",
+  );
+  await page.getByRole("button", { name: "Generate editable proposal" }).click();
+  await expect(page.getByText(/proposal inserted/)).toBeVisible();
   await page.getByLabel("run.ticks").fill("1");
   await page.getByRole("button", { name: "Validate & preview" }).click();
   await expect(page.getByText("worker-a", { exact: true })).toBeVisible();

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -19,6 +20,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from antfarm.adapters.api.catalog import CatalogScenario, ScenarioCatalog
+from antfarm.adapters.generation import (
+    OpenAICompatibleDefinitionGenerator,
+    StaticCustomDefinitionGenerator,
+)
 from antfarm.adapters.terminal import VISIBLE_EVENT_KINDS
 from antfarm.application.contracts import (
     AgentQuery,
@@ -33,7 +38,7 @@ from antfarm.application.contracts import (
     RunStatus,
 )
 from antfarm.config.schema import PopulationConfig
-from antfarm.custom.schema import CustomSimulationDefinition
+from antfarm.custom.schema import CustomSimulationDefinition, load_custom_definition
 from antfarm.domain.json_values import JsonObject, thaw_json
 from antfarm.facade import (
     AntFarmApplication,
@@ -45,6 +50,7 @@ from antfarm.facade import (
     StopRunCommand,
 )
 from antfarm.population import RuntimeOverrides
+from antfarm.ports.generation import CustomDefinitionGenerator
 from antfarm.preflight import preflight_ollama
 
 API_PREFIX = "/api/v1"
@@ -93,6 +99,10 @@ class CustomResolveRequest(ApiModel):
     seed: int | None = None
 
 
+class GenerateCustomRequest(ApiModel):
+    description: Annotated[str, Field(min_length=1, max_length=4_000)]
+
+
 @dataclass(slots=True)
 class ApiRuntime:
     application: AntFarmApplication
@@ -110,20 +120,21 @@ def create_app(
         "http://127.0.0.1:3000",
     ),
     stream_buffer_size: int = DEFAULT_STREAM_BUFFER,
+    custom_definition_generator: CustomDefinitionGenerator | None = None,
 ) -> FastAPI:
     """Create the local M5 control-plane API."""
 
     if stream_buffer_size < 1:
         raise ValueError("stream_buffer_size must be positive")
-    application = AntFarmApplication()
     scenario_root = Path(scenario_directory)
+    custom_starter = load_custom_definition(scenario_root / "custom-warehouse.yaml")
+    generator = custom_definition_generator or _configured_generator(custom_starter)
+    application = AntFarmApplication(custom_definition_generator=generator)
     runtime = ApiRuntime(
         application=application,
         catalog=ScenarioCatalog(scenario_root, application),
         resolutions={},
-        custom_starter=application.load_custom_definition(
-            scenario_root / "custom-warehouse.yaml"
-        ),
+        custom_starter=custom_starter,
         run_ids=set(),
     )
 
@@ -131,6 +142,7 @@ def create_app(
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
         await _stop_active_runs(runtime)
+        await runtime.application.close()
 
     app = FastAPI(
         title="AntFarm Control API",
@@ -217,7 +229,7 @@ def create_app(
         return _resolution_view(runtime, scenario, resolution_id, resolved)
 
     @app.get(f"{API_PREFIX}/custom/starter")
-    async def custom_starter() -> dict[str, object]:
+    async def get_custom_starter() -> dict[str, object]:
         return runtime.custom_starter.model_dump(mode="json", exclude_none=True)
 
     @app.post(f"{API_PREFIX}/custom/validate")
@@ -245,6 +257,19 @@ def create_app(
             "ticks": resolved.definition.run.ticks,
             "runtime_overrides": thaw_json(resolved.runtime_overrides),
             **_custom_preview(runtime.application, resolved.definition),
+        }
+
+    @app.post(f"{API_PREFIX}/custom/generate")
+    async def generate_custom(request: GenerateCustomRequest) -> dict[str, object]:
+        generated = await runtime.application.generate_custom_definition(
+            request.description
+        )
+        _validate_web_custom(generated.definition)
+        return {
+            "definition": generated.definition.model_dump(
+                mode="json", exclude_none=True
+            ),
+            "provenance": thaw_json(generated.provenance),
         }
 
     @app.post(f"{API_PREFIX}/runs", status_code=201)
@@ -634,3 +659,18 @@ def _error_content(
 
 def _fresh_run_id(base: str) -> str:
     return f"{base}-{uuid4().hex[:10]}"
+
+
+def _configured_generator(
+    starter: CustomSimulationDefinition,
+) -> CustomDefinitionGenerator:
+    model = os.environ.get("ANTFARM_GENERATOR_MODEL")
+    if not model:
+        return StaticCustomDefinitionGenerator(starter)
+    return OpenAICompatibleDefinitionGenerator(
+        base_url=os.environ.get(
+            "ANTFARM_GENERATOR_BASE_URL", "http://127.0.0.1:11434/v1"
+        ),
+        model=model,
+        api_key=os.environ.get("ANTFARM_GENERATOR_API_KEY"),
+    )

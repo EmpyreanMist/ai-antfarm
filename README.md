@@ -42,7 +42,7 @@ The foundation currently includes:
 - A Next.js Society control plane for preview, live events, stop, and inspection
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M8 are complete. See
+M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M9 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Web Control Plane
@@ -98,6 +98,19 @@ and uses an installed Google Chrome. CI installs and uses its own Chromium:
 cd web
 npm run test:e2e
 ```
+
+The **Generate editable proposal** control uses an offline deterministic proposal
+by default, so development and CI need no model. To test real local generation,
+start an OpenAI-compatible endpoint and set these before starting the API:
+
+```powershell
+$env:ANTFARM_GENERATOR_MODEL = "qwen3.5:0.8b"
+$env:ANTFARM_GENERATOR_BASE_URL = "http://127.0.0.1:11434/v1"
+uv run antfarm serve --reload
+```
+
+Generated output is never executed or started automatically. It must be reviewed
+in the structured editor and pass the normal server validation/preview step.
 
 ## Custom Simulations
 

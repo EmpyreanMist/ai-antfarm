@@ -97,6 +97,14 @@ The intended boundaries are:
   adds structured custom authoring over the M7 data contract. Frontend state and
   browser-local drafts are not authoritative simulation state.
 
+AI-assisted generation is an application workflow over a dedicated provider port.
+The adapter receives a bounded description and returns text; the application
+accepts only a bare JSON object that validates as `CustomSimulationDefinition`.
+The result is proposal data with bounded provenance, not a resolved configuration
+or run command. The web client inserts it into the M8 editor, preserving explicit
+human review, validation, preview, and start boundaries. Raw model output and
+prompts are not logged or returned in errors.
+
 ## Simulation Lifecycle
 
 ```text

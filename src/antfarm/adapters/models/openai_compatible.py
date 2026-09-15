@@ -53,7 +53,7 @@ class OpenAICompatibleModelProvider:
         self._timeout_seconds = timeout_seconds
         self._parameters = parameters or {}
         self._api_key = api_key
-        self._transport = transport or _async_http_transport
+        self._transport = transport or async_http_transport
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
         body = self._request_body(request)
@@ -247,7 +247,7 @@ def _trait_context(traits: BehavioralTraits) -> dict[str, float]:
     }
 
 
-async def _async_http_transport(
+async def async_http_transport(
     url: str,
     headers: Mapping[str, str],
     body: bytes,

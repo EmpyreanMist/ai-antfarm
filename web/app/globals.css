@@ -111,6 +111,9 @@ button:disabled { opacity: .45; cursor: wait; }
 .builder-toolbar button, .file-button { display: inline-flex; width: auto; padding: 9px 12px; color: var(--muted); border: 1px solid var(--line); background: var(--panel); cursor: pointer; font: 10px "Courier New", monospace; }
 .builder-toolbar > span { margin-left: auto; color: #696f67; font: 10px "Courier New", monospace; }
 .file-button input { position: absolute; width: 1px; height: 1px; padding: 0; opacity: 0; }
+.generation-panel { display: grid; grid-template-columns: .8fr 1.4fr auto; gap: 14px; align-items: end; padding: 22px; border: 1px solid #3c4820; background: rgba(217,255,87,.035); }
+.generation-panel h2 { margin: 0; font-size: 19px; }.generation-panel p:not(.eyebrow) { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.generation-panel textarea { min-height: 92px; }.generation-panel .primary { min-height: 42px; }.generation-panel > small { grid-column: 2 / -1; color: var(--blue); }
 .builder-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, .7fr); gap: 24px; padding: 28px 0 48px; border-bottom: 1px solid var(--line); }
 .definition-editor { display: grid; gap: 12px; }
 .editor-section { padding: 16px; border: 1px solid var(--line); background: rgba(21,24,21,.7); }
@@ -133,5 +136,5 @@ button:disabled { opacity: .45; cursor: wait; }
 .custom-preview pre { overflow: auto; color: #9eb69a; font: 10px/1.45 "Courier New", monospace; }
 .custom-results { padding-top: 42px; }
 @media (max-width: 900px) { .shell { width: min(100% - 28px, 720px); padding-top: 18px; }.hero { align-items: flex-start; flex-direction: column; }.boundary-note { width: 100%; }.workspace, .monitor-grid { grid-template-columns: 1fr; }.run-strip { grid-template-columns: 1fr 2fr 1fr; }.stop { grid-column: 1 / -1; min-height: 48px; } }
-@media (max-width: 900px) { .builder-layout { grid-template-columns: 1fr; }.builder-actions { position: static; } }
+@media (max-width: 900px) { .builder-layout, .generation-panel { grid-template-columns: 1fr; }.builder-actions { position: static; }.generation-panel > small { grid-column: 1; } }
 @media (max-width: 560px) { h1 { font-size: 50px; }.workspace { gap: 38px; }.config-form, .launch-panel { grid-template-columns: 1fr; }.wide, .launch { grid-column: 1; }.run-strip { grid-template-columns: 1fr 2fr; }.run-strip > div:nth-child(3) { border-top: 1px solid var(--line); }.agent-grid { grid-template-columns: 1fr; } }

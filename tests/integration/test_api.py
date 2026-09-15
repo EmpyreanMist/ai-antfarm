@@ -218,3 +218,16 @@ def test_web_custom_definition_rejects_unsafe_storage_and_unknown_fields() -> No
         unsafe = client.post("/api/v1/custom/validate", json=definition)
         assert unsafe.status_code == 422
         assert unsafe.json()["error"]["code"] == "invalid_argument"
+
+
+def test_generation_returns_an_editable_proposal_without_starting_a_run() -> None:
+    for client in _client():
+        generated = client.post(
+            "/api/v1/custom/generate",
+            json={"description": "Workers process a queue of warehouse orders."},
+        )
+
+        assert generated.status_code == 200, generated.text
+        assert generated.json()["definition"]["kind"] == "custom"
+        assert generated.json()["provenance"]["kind"] == "generated_proposal"
+        assert "resolution_id" not in generated.json()

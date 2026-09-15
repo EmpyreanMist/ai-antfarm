@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This is the active plan from the completed M0-M8 baseline onward. The detailed
+This is the active plan from the completed M0-M9 baseline onward. The detailed
 M0-M2 implementation history is preserved unchanged in
 [`ROADMAP_old.md`](ROADMAP_old.md). Completed work is summarized here only where
 it establishes a dependency or constraint for future work.
@@ -400,6 +400,13 @@ collaborative editing, dynamic plugins, or a generic visualization engine.
 
 ## M9: AI-Assisted Simulation Generation
 
+**Status: Complete.** Implemented as a bounded provider-neutral generation
+service, deterministic offline adapter, optional OpenAI-compatible adapter, and
+builder prompt panel. Generated text must be one complete M7 JSON object and pass
+strict schema validation; errors expose no raw output. Generation returns only an
+editable proposal and provenance, never a resolution or run. The user must still
+edit, validate/preview, and explicitly start through M8.
+
 **Outcome:** a user can describe a simulation in natural language and receive a
 validated, editable M7 proposal in the M8 builder without granting the model an
 execution or mutation path.
@@ -438,6 +445,10 @@ plugins, prompt-history accounts, model training, or replacing structured editin
 
 ## M10: Visualization, Replay, and Experiment Analysis
 
+**Outcome:** completed runs can be replayed without model calls, compared through
+stable application contracts, and explored through useful web timelines and
+state/metric views.
+
 Implement recorded-action replay without model calls and stable comparison of
 completed runs, restoring the deferred M1-03/M1-04 outcomes on top of mature run
 queries. Evolve the web experience with timelines, state changes, conversations,
@@ -446,6 +457,32 @@ provide relevant views such as relationship networks or economic charts without
 making a universal visualization system a prerequisite. Add time-series metrics,
 statistical analysis, and large-scale experiment scheduling incrementally when
 their requirements are demonstrated.
+
+### M10 acceptance criteria
+
+- Reconstruct a replay from persisted committed action outcomes and checkpoints
+  without invoking cognition or a model provider. Verify event ordering, run and
+  schema compatibility, and deterministic final state; fail safely on incomplete
+  or incompatible histories.
+- Add immutable application replay/timeline and comparison DTOs with bounded
+  pagination. Transport and UI consume projections rather than storage records or
+  event-domain objects.
+- Compare at least two completed compatible runs across final world state,
+  built-in metrics, tick counts, action/rejection/failure totals, and per-agent or
+  per-entity outcomes. Explicitly report incompatible fields instead of silently
+  coercing them.
+- Add web run-history selection for process-known and configured SQLite runs,
+  timeline inspection, replay controls, state/metric deltas, and side-by-side run
+  comparison. Mode-specific views may augment the generic baseline.
+- Keep all result sets and rendered series bounded. Large experiment scheduling,
+  advanced statistics, relationship graphs, and domain-specific charts remain
+  incremental follow-up unless needed for the acceptance example.
+- Cover Society and custom replay, no-model guarantees, corruption/incompatibility
+  errors, pagination, comparison, API projection, and an offline Playwright
+  history/replay/comparison journey.
+
+**M10 non-goals:** branching timelines, distributed experiment workers, a generic
+chart-plugin system, full event sourcing, or replay that calls an LLM.
 
 ## M11: Optional Advanced Simulation Systems
 

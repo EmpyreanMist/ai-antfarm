@@ -32,6 +32,11 @@ from antfarm.application.modes import BuiltInModeRegistry
 from antfarm.composition import ComposedSimulation, compose
 from antfarm.config import load_scenario
 from antfarm.config.schema import ScenarioConfig, SqliteStorageConfig, StorageConfig
+from antfarm.custom.generation import (
+    CustomGenerationService,
+    GenerateCustomDefinitionCommand,
+    GeneratedCustomDefinition,
+)
 from antfarm.custom.runtime import compose_custom
 from antfarm.custom.schema import (
     CustomRunConfig,
@@ -54,6 +59,7 @@ from antfarm.population import (
     runtime_overrides_data,
 )
 from antfarm.ports.events import Subscription
+from antfarm.ports.generation import CustomDefinitionGenerator
 from antfarm.ports.models import ModelProvider
 from antfarm.ports.storage import Storage
 
@@ -136,11 +142,17 @@ class AntFarmApplication:
         *,
         modes: BuiltInModeRegistry | None = None,
         custom_model_providers: Mapping[str, ModelProvider] | None = None,
+        custom_definition_generator: CustomDefinitionGenerator | None = None,
     ) -> None:
         self._runs: dict[RunId, ApplicationRun] = {}
         self._query_storage = storage
         self._modes = modes or BuiltInModeRegistry()
         self._custom_model_providers = dict(custom_model_providers or {})
+        self._custom_generation = (
+            CustomGenerationService(custom_definition_generator)
+            if custom_definition_generator is not None
+            else None
+        )
 
     def list_modes(self) -> tuple[ModeView, ...]:
         """Enumerate the closed set of curated simulation modes."""
@@ -187,6 +199,22 @@ class AntFarmApplication:
                 ErrorCode.INVALID_ARGUMENT,
                 f"custom runtime overrides are invalid: {error}",
             ) from error
+
+    async def generate_custom_definition(
+        self, description: str
+    ) -> GeneratedCustomDefinition:
+        if self._custom_generation is None:
+            raise ApplicationError(
+                ErrorCode.INVALID_STATE,
+                "custom definition generation is not configured",
+            )
+        return await self._custom_generation.generate(
+            GenerateCustomDefinitionCommand(description)
+        )
+
+    async def close(self) -> None:
+        if self._custom_generation is not None:
+            await self._custom_generation.close()
 
     def inspect_resolved_entities(
         self,

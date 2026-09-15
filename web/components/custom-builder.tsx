@@ -7,6 +7,7 @@ import {
   CustomEntity,
   CustomPreview,
   eventStreamUrl,
+  generateCustom,
   getCustomStarter,
   inspectCustomRun,
   JsonValue,
@@ -31,6 +32,8 @@ export function CustomBuilder() {
   const [events, setEvents] = useState<SimulationEvent[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [description, setDescription] = useState("");
+  const [generationNote, setGenerationNote] = useState("");
   const lastSequence = useRef(0);
   const terminalRun = useRef(false);
 
@@ -118,6 +121,26 @@ export function CustomBuilder() {
       setDefinition(result.definition);
       setPreview(result);
       setEntities(result.entities);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generate() {
+    setBusy(true);
+    setError("");
+    try {
+      const generated = await generateCustom(description);
+      setDefinition(generated.definition);
+      setPreview(null);
+      setEntities([]);
+      setGenerationNote(
+        generated.provenance.generator === "offline_static"
+          ? "Offline demo proposal inserted. Edit it, then validate before running."
+          : "Model proposal inserted. Review and validate it before running.",
+      );
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -217,6 +240,13 @@ export function CustomBuilder() {
         <button type="button" onClick={exportDefinition} disabled={!definition}>Export JSON</button>
         <span>Draft saved locally</span>
       </div>
+
+      <section className="generation-panel">
+        <div><p className="eyebrow">AI-assisted proposal</p><h2>Describe a simulation</h2><p>The generator can only propose data. It cannot validate, start, or mutate a simulation.</p></div>
+        <textarea aria-label="Simulation description" value={description} maxLength={4000} onChange={(event) => setDescription(event.target.value)} rows={4} placeholder="Simulate a queue where workers process tasks with different capacities…" />
+        <button className="primary" type="button" disabled={busy || !description.trim()} onClick={generate}>Generate editable proposal</button>
+        {generationNote ? <small>{generationNote}</small> : null}
+      </section>
 
       {definition ? (
         <section className="builder-layout">

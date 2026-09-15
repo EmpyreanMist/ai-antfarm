@@ -112,6 +112,16 @@ export type CustomResolution = CustomPreview & {
   runtime_overrides: Record<string, JsonValue>;
 };
 
+export type GeneratedCustom = {
+  definition: CustomDefinition;
+  provenance: {
+    kind: string;
+    generator: string;
+    description_length: number;
+    schema_version: number;
+  };
+};
+
 export type ResolveInput = {
   seed?: number;
   run_id?: string;
@@ -172,6 +182,13 @@ export function resolveCustom(
   return request("/custom/resolve", {
     method: "POST",
     body: JSON.stringify({ definition }),
+  });
+}
+
+export function generateCustom(description: string): Promise<GeneratedCustom> {
+  return request("/custom/generate", {
+    method: "POST",
+    body: JSON.stringify({ description }),
   });
 }
 
