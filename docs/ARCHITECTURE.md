@@ -114,6 +114,15 @@ event sequence with the checkpoint. Transport clients receive bounded immutable
 frames and comparison deltas, never storage records. This is action replay, not
 full event sourcing or resumable process ownership.
 
+Local-model discovery is exposed through a provider-neutral inventory port; the
+Ollama adapter translates `/api/tags` into canonical model names and bounded
+availability state. The browser never accesses Ollama directly. Web-authored
+agent drafts contain an ordinary validated profile plus an optional concrete
+model tag. During resolution they replace the selected template population,
+derive provider-backed model configurations, and normalize into the same
+`ScenarioConfig`, inspection, persistence, preflight, and composition path used
+by YAML and CLI scenarios. A web draft is not a second domain agent type.
+
 ## Simulation Lifecycle
 
 ```text

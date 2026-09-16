@@ -24,9 +24,11 @@ from antfarm.adapters.generation import (
     OpenAICompatibleDefinitionGenerator,
     StaticCustomDefinitionGenerator,
 )
+from antfarm.adapters.models.ollama import OllamaModelPreflight
 from antfarm.adapters.storage import SQLiteStorage
 from antfarm.adapters.terminal import VISIBLE_EVENT_KINDS
 from antfarm.application.contracts import (
+    AgentDraftView,
     AgentQuery,
     ApplicationError,
     EntityQuery,
@@ -40,7 +42,7 @@ from antfarm.application.contracts import (
     RunState,
     RunStatus,
 )
-from antfarm.config.schema import PopulationConfig
+from antfarm.config.schema import AgentProfileConfig, PopulationConfig
 from antfarm.custom.schema import CustomSimulationDefinition, load_custom_definition
 from antfarm.domain.json_values import JsonObject, thaw_json
 from antfarm.facade import (
@@ -52,8 +54,9 @@ from antfarm.facade import (
     StartRunCommand,
     StopRunCommand,
 )
-from antfarm.population import RuntimeOverrides
+from antfarm.population import RuntimeOverrides, WebAgentDraft
 from antfarm.ports.generation import CustomDefinitionGenerator
+from antfarm.ports.models import ModelInventory
 from antfarm.preflight import preflight_ollama
 
 API_PREFIX = "/api/v1"
@@ -73,6 +76,13 @@ class ApiModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class AgentDraftRequest(ApiModel):
+    id: Annotated[str, Field(min_length=1, max_length=100)]
+    model: Annotated[str | None, Field(min_length=1, max_length=300)] = None
+    profile: AgentProfileConfig
+    cognition_interval: Annotated[int | None, Field(ge=1)] = None
+
+
 class ResolveRequest(ApiModel):
     seed: int | None = None
     run_id: str | None = None
@@ -81,6 +91,13 @@ class ResolveRequest(ApiModel):
     population: PopulationConfig | None = None
     profiles: dict[str, dict[str, object]] = Field(default_factory=dict)
     model_assignments: dict[str, str] = Field(default_factory=dict)
+    agents: list[AgentDraftRequest] | None = None
+
+
+class GeneratePopulationRequest(ApiModel):
+    count: Annotated[int, Field(ge=1, le=10)]
+    seed: int
+    model: Annotated[str, Field(min_length=1, max_length=300)]
 
 
 class StartRequest(ApiModel):
@@ -126,6 +143,7 @@ def create_app(
     stream_buffer_size: int = DEFAULT_STREAM_BUFFER,
     custom_definition_generator: CustomDefinitionGenerator | None = None,
     history_database: str | Path | None = None,
+    model_inventory: ModelInventory | None = None,
 ) -> FastAPI:
     """Create the local M5 control-plane API."""
 
@@ -136,8 +154,16 @@ def create_app(
     generator = custom_definition_generator or _configured_generator(custom_starter)
     history_path = history_database or os.environ.get("ANTFARM_HISTORY_DB")
     history_storage = SQLiteStorage(history_path) if history_path else None
+    inventory = model_inventory or OllamaModelPreflight(
+        base_url=os.environ.get(
+            "ANTFARM_OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1"
+        ),
+        timeout_seconds=2,
+    )
     application = AntFarmApplication(
-        storage=history_storage, custom_definition_generator=generator
+        storage=history_storage,
+        custom_definition_generator=generator,
+        model_inventory=inventory,
     )
     runtime = ApiRuntime(
         application=application,
@@ -218,6 +244,40 @@ def create_app(
             ]
         }
 
+    @app.get(f"{API_PREFIX}/runtimes/local-models")
+    async def local_models() -> dict[str, object]:
+        view = await runtime.application.discover_local_models()
+        return {
+            "runtime": view.runtime,
+            "connected": view.connected,
+            "models": list(view.models),
+            "error": view.error,
+        }
+
+    @app.get(f"{API_PREFIX}/scenarios/{{scenario_id}}/agent-drafts")
+    async def get_agent_drafts(scenario_id: str) -> dict[str, object]:
+        scenario = _require_scenario(runtime, scenario_id)
+        return {
+            "items": [
+                _agent_draft_view(item)
+                for item in runtime.application.scenario_agent_drafts(scenario.config)
+            ]
+        }
+
+    @app.post(f"{API_PREFIX}/scenarios/{{scenario_id}}/agent-drafts/generate")
+    async def generate_population(
+        scenario_id: str, request: GeneratePopulationRequest
+    ) -> dict[str, object]:
+        _require_scenario(runtime, scenario_id)
+        return {
+            "items": [
+                _agent_draft_view(item)
+                for item in runtime.application.generate_agent_drafts(
+                    count=request.count, seed=request.seed, model=request.model
+                )
+            ]
+        }
+
     @app.post(f"{API_PREFIX}/scenarios/{{scenario_id}}/resolve")
     async def resolve_scenario(
         scenario_id: str, request: ResolveRequest
@@ -234,6 +294,21 @@ def create_app(
                 profiles=request.profiles,
                 model_assignments=request.model_assignments,
                 model=request.model,
+                web_agents=(
+                    tuple(
+                        WebAgentDraft(
+                            id=agent.id,
+                            model=agent.model,
+                            profile=agent.profile.model_dump(
+                                mode="json", exclude_none=True
+                            ),
+                            cognition_interval=agent.cognition_interval,
+                        )
+                        for agent in request.agents
+                    )
+                    if request.agents is not None
+                    else None
+                ),
             ),
         )
         resolution_id = uuid4().hex
@@ -536,6 +611,15 @@ def _agent_view(agent: ResolvedAgentInspection) -> dict[str, object]:
         "model": agent.model,
         "configuration": thaw_json(agent.configuration),
         "public": thaw_json(agent.public),
+    }
+
+
+def _agent_draft_view(agent: AgentDraftView) -> dict[str, object]:
+    return {
+        "id": agent.id,
+        "model": agent.model,
+        "profile": thaw_json(agent.profile),
+        "cognition_interval": agent.cognition_interval,
     }
 
 

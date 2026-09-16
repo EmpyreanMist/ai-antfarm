@@ -2,12 +2,14 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
+import { AgentBuilder } from "@/components/agent-builder";
+
 import {
   Agent,
+  AgentDraft,
   eventStreamUrl,
   GameMode,
   inspectRun,
-  JsonValue,
   listModes,
   listModeScenarios,
   Resolution,
@@ -35,11 +37,8 @@ export function ControlPlane() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [seed, setSeed] = useState("");
-  const [activeAgents, setActiveAgents] = useState("");
   const [runId, setRunId] = useState("");
-  const [model, setModel] = useState("");
-  const [profileOverrides, setProfileOverrides] = useState("{}");
-  const [modelAssignments, setModelAssignments] = useState("{}");
+  const [agentDrafts, setAgentDrafts] = useState<AgentDraft[]>([]);
   const [mode, setMode] = useState<"bounded" | "continuous">("bounded");
   const [tickSeconds, setTickSeconds] = useState("1");
   const lastSequence = useRef(0);
@@ -85,9 +84,8 @@ export function ControlPlane() {
   useEffect(() => {
     if (!selected) return;
     setSeed(String(selected.seed));
-    setActiveAgents(String(selected.default_active_agents));
     setRunId("");
-    setModel("");
+    setAgentDrafts([]);
     setResolution(null);
     setRun(null);
     setEvents([]);
@@ -96,6 +94,15 @@ export function ControlPlane() {
     lastSequence.current = 0;
     terminalRun.current = true;
   }, [selected]);
+
+  const receiveAgentDrafts = useCallback((drafts: AgentDraft[]) => {
+    setAgentDrafts(drafts);
+    setResolution(null);
+  }, []);
+
+  const receiveBuilderError = useCallback((message: string) => {
+    setError(message);
+  }, []);
 
   const refreshInspection = useCallback(async (id: string) => {
     const inspection = await inspectRun(id);
@@ -153,15 +160,10 @@ export function ControlPlane() {
     setBusy(true);
     setError("");
     try {
-      const profiles = parseObject(profileOverrides, "Profile overrides");
-      const assignments = parseStringMap(modelAssignments, "Model assignments");
       const resolved = await resolveScenario(selected.id, {
         seed: numberOrUndefined(seed),
-        active_agents: numberOrUndefined(activeAgents),
         run_id: runId.trim() || undefined,
-        model: model.trim() || undefined,
-        profiles,
-        model_assignments: assignments,
+        agents: agentDrafts,
       });
       setResolution(resolved);
       setAgents(resolved.agents);
@@ -282,15 +284,17 @@ export function ControlPlane() {
           </div>
           <form className="config-form" onSubmit={preview}>
             <label>Seed<input value={seed} onChange={(event) => setSeed(event.target.value)} type="number" /></label>
-            <label>Active agents<input value={activeAgents} onChange={(event) => setActiveAgents(event.target.value)} min="1" max={selected?.agent_count} type="number" /></label>
             <label className="wide">Run ID <span>optional</span><input value={runId} onChange={(event) => setRunId(event.target.value)} placeholder="generated automatically" /></label>
-            <label className="wide">Model override <span>optional</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder={selected?.models.join(", ")} /></label>
-            <details className="wide advanced">
-              <summary>Advanced overrides</summary>
-              <label>Profile overrides <span>JSON by agent ID</span><textarea value={profileOverrides} onChange={(event) => setProfileOverrides(event.target.value)} rows={4} /></label>
-              <label>Model assignments <span>JSON by agent ID</span><textarea value={modelAssignments} onChange={(event) => setModelAssignments(event.target.value)} rows={3} /></label>
-            </details>
-            <button className="primary wide" disabled={busy || !selected} type="submit">
+            {selected ? <AgentBuilder
+              scenarioId={selected.id}
+              runtime={selected.runtime}
+              configuredModels={selected.models}
+              initialCount={selected.default_active_agents}
+              seed={numberOrUndefined(seed) ?? selected.seed}
+              onChange={receiveAgentDrafts}
+              onError={receiveBuilderError}
+            /> : null}
+            <button className="primary wide" disabled={busy || !selected || agentDrafts.length === 0} type="submit">
               {busy ? "Resolving…" : "Resolve & preview agents"}
             </button>
           </form>
@@ -327,7 +331,7 @@ export function ControlPlane() {
           <div className="inspectors">
             <div className="panel agent-panel">
               <div className="panel-title"><h3>Agents</h3><span>{agents.length}</span></div>
-              {agents.length === 0 ? <Empty label="Resolve a scenario to inspect its agents." /> : <div className="agent-grid">{agents.map((agent) => <article key={agent.agent_id}><span>{initials(agent)}</span><div><strong>{displayName(agent)}</strong><small>{agent.model}</small></div></article>)}</div>}
+              {agents.length === 0 ? <Empty label="Resolve a scenario to inspect its agents." /> : <div className="agent-grid">{agents.map((agent) => <article key={agent.agent_id}><span>{initials(agent)}</span><div><strong>{displayName(agent)}</strong><small>{agent.model}</small><details><summary>Resolved public/private preview</summary><h4>Public</h4><pre>{JSON.stringify(agent.public, null, 2)}</pre><h4>Complete configuration</h4><pre>{JSON.stringify(agent.configuration, null, 2)}</pre></details></div></article>)}</div>}
             </div>
             <div className="panel state-panel">
               <div className="panel-title"><h3>World state</h3><span>tick {snapshot?.tick ?? 0}</span></div>
@@ -348,22 +352,6 @@ type StreamMessage =
   | { type: "event"; event: SimulationEvent }
   | { type: "state"; state: RunState }
   | { type: "recovery_required"; after: number; reason: string };
-
-function parseObject(value: string, label: string): Record<string, Record<string, JsonValue>> {
-  const parsed = JSON.parse(value) as unknown;
-  if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
-    throw new Error(`${label} must be a JSON object.`);
-  }
-  return parsed as Record<string, Record<string, JsonValue>>;
-}
-
-function parseStringMap(value: string, label: string): Record<string, string> {
-  const parsed = parseObject(value, label);
-  if (Object.values(parsed).some((item) => typeof item !== "string")) {
-    throw new Error(`${label} values must be strings.`);
-  }
-  return parsed as unknown as Record<string, string>;
-}
 
 function numberOrUndefined(value: string): number | undefined {
   return value.trim() ? Number(value) : undefined;

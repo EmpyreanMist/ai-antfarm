@@ -45,6 +45,20 @@ export type Agent = {
   public: Record<string, JsonValue>;
 };
 
+export type AgentDraft = {
+  id: string;
+  model: string | null;
+  profile: Record<string, JsonValue>;
+  cognition_interval: number | null;
+};
+
+export type LocalModels = {
+  runtime: string;
+  connected: boolean;
+  models: string[];
+  error: string | null;
+};
+
 export type Resolution = {
   resolution_id: string;
   scenario_id: string;
@@ -161,6 +175,7 @@ export type ResolveInput = {
   model?: string;
   profiles?: Record<string, Record<string, JsonValue>>;
   model_assignments?: Record<string, string>;
+  agents?: AgentDraft[];
 };
 
 export type StartInput = {
@@ -193,6 +208,28 @@ export function resolveScenario(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function discoverLocalModels(): Promise<LocalModels> {
+  return request("/runtimes/local-models");
+}
+
+export async function getAgentDrafts(scenarioId: string): Promise<AgentDraft[]> {
+  const response = await request<{ items: AgentDraft[] }>(
+    `/scenarios/${encodeURIComponent(scenarioId)}/agent-drafts`,
+  );
+  return response.items;
+}
+
+export async function generateAgentDrafts(
+  scenarioId: string,
+  input: { count: number; seed: number; model: string },
+): Promise<AgentDraft[]> {
+  const response = await request<{ items: AgentDraft[] }>(
+    `/scenarios/${encodeURIComponent(scenarioId)}/agent-drafts/generate`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  return response.items;
 }
 
 export function getCustomStarter(): Promise<CustomDefinition> {

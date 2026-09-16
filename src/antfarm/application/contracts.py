@@ -82,6 +82,28 @@ class ModeView:
 
 
 @dataclass(frozen=True, slots=True)
+class LocalModelsView:
+    runtime: str
+    connected: bool
+    models: tuple[str, ...]
+    error: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "models", tuple(self.models))
+
+
+@dataclass(frozen=True, slots=True)
+class AgentDraftView:
+    id: str
+    model: str
+    profile: JsonObject
+    cognition_interval: int | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "profile", freeze_object(self.profile))
+
+
+@dataclass(frozen=True, slots=True)
 class RunState:
     run_id: str
     mode: RunMode

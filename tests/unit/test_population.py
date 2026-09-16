@@ -8,12 +8,13 @@ from typing import cast
 import pytest
 from pydantic import ValidationError
 
+from antfarm.config import load_scenario
 from antfarm.config.schema import (
     BehavioralTraitsConfig,
     PopulationConfig,
     ScenarioConfig,
 )
-from antfarm.population import RuntimeOverrides, resolve_run_config
+from antfarm.population import RuntimeOverrides, WebAgentDraft, resolve_run_config
 
 
 def _scenario_data() -> dict[str, object]:
@@ -82,6 +83,28 @@ def test_fully_generated_population_is_materialized_and_reproducible() -> None:
     )
     assert profile.economics is not None
     assert 5 <= cast(int, profile.economics.money) <= 50
+
+
+def test_web_agent_drafts_become_normal_resolved_agents_and_models() -> None:
+    source = load_scenario(Path("scenarios/examples/live-social-ollama.yaml"))
+    profile = {
+        "identity": {"display_name": "New Agent"},
+        "personality": {"description": "Curious and direct."},
+    }
+    resolved = resolve_run_config(
+        source,
+        RuntimeOverrides(
+            web_agents=(
+                WebAgentDraft(id="new-agent", profile=profile, model="gemma4:e2b"),
+                WebAgentDraft(id="clone-agent", profile=profile, model="gemma4:e2b"),
+            )
+        ),
+    )
+
+    assert {agent.id for agent in resolved.agents} == {"new-agent", "clone-agent"}
+    assert resolved.run.active_agents == 2
+    assert len({agent.model_ref for agent in resolved.agents}) == 1
+    assert resolved.models[resolved.agents[0].model_ref].model == "gemma4:e2b"
 
 
 def test_different_seed_changes_generated_values_without_mutating_source() -> None:

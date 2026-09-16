@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This is the active plan from the completed M0-M10 baseline onward. The detailed
+This is the active plan from the completed M0-M11 baseline onward. The detailed
 M0-M2 implementation history is preserved unchanged in
 [`ROADMAP_old.md`](ROADMAP_old.md). Completed work is summarized here only where
 it establishes a dependency or constraint for future work.
@@ -508,6 +508,16 @@ special-case engines. Each milestone below must leave an independently useful,
 manually testable browser experience.
 
 ## M11: Web-First Models and Agent Builder
+
+**Status: Complete.** The backend exposes bounded Ollama connectivity and
+installed-model inventory through a provider-neutral port. The Society web flow
+uses a shared Agent Builder for manual, seeded-random, and mixed populations;
+generated profiles use the normal validated profile schema and remain editable.
+Users can resize, randomize, clone, reset, add/remove, assign shared or per-agent
+installed models, edit supported profile/economic/relationship/visibility fields,
+and inspect exact public plus complete resolved configuration before starting.
+Resolved web drafts normalize into ordinary `ScenarioConfig` and persist with
+runtime provenance rather than introducing a second agent type.
 
 **User-visible outcome:** a user can discover local Ollama models and construct,
 randomize, edit, and preview a complete Society-compatible population in the

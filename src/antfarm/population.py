@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from random import Random
 from typing import Literal, Protocol, cast
@@ -49,6 +49,17 @@ class RuntimeOverrides:
     profiles: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
     model_assignments: Mapping[str, str] = field(default_factory=dict)
     model: str | None = None
+    web_agents: Sequence[WebAgentDraft] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WebAgentDraft:
+    """Editable browser agent normalized into the ordinary profile schema."""
+
+    id: str
+    profile: Mapping[str, object]
+    model: str | None = None
+    cognition_interval: int | None = None
 
 
 def runtime_overrides_data(overrides: RuntimeOverrides | None) -> JsonObject:
@@ -72,6 +83,14 @@ def runtime_overrides_data(overrides: RuntimeOverrides | None) -> JsonObject:
         }
     if overrides.model_assignments:
         data["model_assignments"] = dict(sorted(overrides.model_assignments.items()))
+    if overrides.web_agents is not None:
+        data["web_agents"] = tuple(
+            {
+                "id": agent.id,
+                **({"model": agent.model} if agent.model is not None else {}),
+            }
+            for agent in overrides.web_agents
+        )
     return freeze_object(data)
 
 
@@ -91,6 +110,8 @@ def resolve_run_config(
     del template_selector
     requested = overrides or RuntimeOverrides()
     data = source.model_dump(mode="json", exclude_none=True)
+    if requested.web_agents is not None:
+        _apply_web_agents(data, source, requested.web_agents)
     if requested.population is not None:
         data["population"] = requested.population.model_dump(
             mode="json", exclude_none=True
@@ -191,6 +212,77 @@ def resolve_run_config(
             models[model_ref]["model"] = requested.model
         resolved_config = ScenarioConfig.model_validate(data)
     return resolved_config
+
+
+def _apply_web_agents(
+    data: dict[str, object],
+    source: ScenarioConfig,
+    drafts: Sequence[WebAgentDraft],
+) -> None:
+    if not 1 <= len(drafts) <= 10:
+        raise ValueError("web population must contain between 1 and 10 agents")
+    ids = [draft.id for draft in drafts]
+    if len(set(ids)) != len(ids):
+        raise ValueError("web population agent identifiers must be unique")
+    templates = source.expand_agents()
+    if not templates:
+        raise ValueError("source scenario has no agent template")
+    profiles = cast(dict[str, object], data.setdefault("profiles", {}))
+    models = cast(dict[str, dict[str, object]], data["models"])
+    generated_models: dict[tuple[str, str], str] = {}
+    agents: list[dict[str, object]] = []
+    for index, draft in enumerate(drafts):
+        template = templates[index % len(templates)]
+        profile_ref = f"web-profile-{draft.id}"
+        profiles[profile_ref] = dict(draft.profile)
+        model_ref = template.model_ref
+        if draft.model is not None:
+            _validate_runtime_model(draft.model)
+            template_model = source.models[template.model_ref]
+            provider = source.providers[template_model.provider_ref]
+            if not isinstance(provider, OpenAICompatibleProviderConfig):
+                raise ValueError(
+                    "installed model assignment requires an OpenAI-compatible "
+                    "scenario"
+                )
+            key = (template.model_ref, draft.model)
+            model_ref = generated_models.setdefault(
+                key, f"web-model-{len(generated_models) + 1}"
+            )
+            if model_ref not in models:
+                model_data = template_model.model_dump(mode="json", exclude_none=True)
+                model_data["model"] = draft.model
+                models[model_ref] = model_data
+        agent: dict[str, object] = {
+            "id": draft.id,
+            "model_ref": model_ref,
+            "profile_ref": profile_ref,
+        }
+        interval = draft.cognition_interval or template.cognition_interval
+        if interval is not None:
+            agent["cognition_interval"] = interval
+        agents.append(agent)
+    data["agents"] = agents
+    data["agent_pools"] = []
+    data.pop("population", None)
+    raw_providers = data["providers"]
+    if not isinstance(raw_providers, dict):
+        raise TypeError("scenario providers must be an object")
+    providers = cast(dict[str, object], raw_providers)
+    selected_ids = set(ids)
+    for raw_provider in providers.values():
+        if not isinstance(raw_provider, dict):
+            raise TypeError("scenario provider must be an object")
+        provider_data = cast(dict[str, object], raw_provider)
+        decisions = provider_data.get("decisions")
+        if provider_data.get("kind") == "mock" and isinstance(decisions, dict):
+            provider_data["decisions"] = {
+                agent_id: value
+                for agent_id, value in decisions.items()
+                if agent_id in selected_ids
+            }
+    run = cast(dict[str, object], data["run"])
+    run["active_agents"] = len(agents)
 
 
 def _randomization_for(

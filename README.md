@@ -42,7 +42,7 @@ The foundation currently includes:
 - A Next.js Society control plane for preview, live events, stop, and inspection
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M10 are complete. See
+M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M11 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Web Control Plane
@@ -66,8 +66,11 @@ npm run dev
 ```
 
 Open `http://localhost:3000`. The default **Live Society · Mock** scenario needs
-no model runtime: select it, adjust the seed or active-agent count, choose
-**Resolve & preview agents**, then start a bounded or continuous run. Committed
+no model runtime: select it, adjust the seed, build or deterministically randomize
+the population in the **Shared Agent Builder**, choose **Resolve & preview
+agents**, then start a bounded or continuous run. Generated and manual agents use
+the same editable profile fields. The resolved inspector shows both explicitly
+public data and the complete configuring-user view before launch. Committed
 speech/actions and the latest atomic world snapshot appear in the browser. Use
 **Stop safely** to end a continuous run.
 
@@ -80,6 +83,10 @@ ollama pull qwen3.5:0.8b
 ```
 
 The server checks the active Ollama assignments before creating the run. API
+model discovery reads Ollama through the backend and populates normal model
+selectors; the browser never calls Ollama directly and does not download models.
+If Ollama is unavailable or a configured tag is missing, the Agent Builder shows
+that state and keeps the failure recoverable. API
 health is available at `http://127.0.0.1:8000/health`, and interactive API
 documentation is at `http://127.0.0.1:8000/docs`. To point the browser at another
 API origin, copy `web/.env.example` to `web/.env.local` and change

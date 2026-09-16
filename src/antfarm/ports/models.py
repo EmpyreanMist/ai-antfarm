@@ -65,3 +65,9 @@ class ModelProvider(Protocol):
     async def generate(self, request: ModelRequest) -> ModelResponse: ...
 
     async def close(self) -> None: ...
+
+
+class ModelInventory(Protocol):
+    runtime: str
+
+    async def list_installed(self) -> Sequence[str]: ...

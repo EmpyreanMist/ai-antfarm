@@ -2,6 +2,7 @@
 
 from antfarm.application.continuous import ContinuousRunner, ContinuousRunResult
 from antfarm.application.contracts import (
+    AgentDraftView,
     AgentPage,
     AgentQuery,
     ApplicationError,
@@ -11,6 +12,7 @@ from antfarm.application.contracts import (
     EventPage,
     EventQuery,
     EventView,
+    LocalModelsView,
     ModeView,
     ReplayFrame,
     ReplayPage,
@@ -34,6 +36,7 @@ from antfarm.application.scheduler import CognitionScheduler, StableScheduler
 
 __all__ = [
     "BuiltInMetricCollector",
+    "AgentDraftView",
     "AgentPage",
     "AgentQuery",
     "ApplicationError",
@@ -47,6 +50,7 @@ __all__ = [
     "EventQuery",
     "EventView",
     "ModeView",
+    "LocalModelsView",
     "ReplayFrame",
     "ReplayPage",
     "ReplayQuery",

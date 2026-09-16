@@ -19,6 +19,8 @@ class OllamaPreflightError(ValueError):
 class OllamaModelPreflight:
     """Verify concrete model tags through Ollama's local tags endpoint."""
 
+    runtime = "ollama"
+
     def __init__(
         self,
         *,
@@ -37,19 +39,7 @@ class OllamaModelPreflight:
 
     async def ensure_available(self, models: Sequence[str]) -> None:
         requested = tuple(dict.fromkeys(models))
-        try:
-            raw = await asyncio.wait_for(
-                self._transport(self._endpoint, self._timeout_seconds),
-                timeout=self._timeout_seconds,
-            )
-            installed = _parse_installed_models(raw)
-        except (OllamaPreflightError, asyncio.CancelledError):
-            raise
-        except Exception as error:
-            raise OllamaPreflightError(
-                f"Ollama is unavailable at {self._endpoint}.\n\n"
-                "Start it with:\n  ollama serve"
-            ) from error
+        installed = await self.list_installed()
 
         missing = [model for model in requested if _canonical(model) not in installed]
         if not missing:
@@ -63,6 +53,24 @@ class OllamaModelPreflight:
             f"Installed models:\n{installed_lines}\n\n"
             f"Install it with:\n  ollama pull {model}"
         )
+
+    async def list_installed(self) -> tuple[str, ...]:
+        """Return canonical installed tags without exposing Ollama wire data."""
+
+        try:
+            raw = await asyncio.wait_for(
+                self._transport(self._endpoint, self._timeout_seconds),
+                timeout=self._timeout_seconds,
+            )
+            installed = _parse_installed_models(raw)
+        except (OllamaPreflightError, asyncio.CancelledError):
+            raise
+        except Exception as error:
+            raise OllamaPreflightError(
+                f"Ollama is unavailable at {self._endpoint}.\n\n"
+                "Start it with:\n  ollama serve"
+            ) from error
+        return tuple(sorted(installed))
 
 
 def _parse_installed_models(raw: bytes) -> frozenset[str]:

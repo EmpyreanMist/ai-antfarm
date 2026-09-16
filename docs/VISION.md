@@ -129,6 +129,12 @@ built-in Society mode.
 
 ## First Web Product Target
 
+M11 delivers the first shared Agent Builder: users can discover locally installed
+Ollama models, resize and randomize a population of 1-10 agents, edit complete
+profiles, assign a shared or per-agent model, and inspect the resolved public and
+private configuration before a run. These web-authored agents are normalized into
+the same validated `ScenarioConfig` used by CLI and API runs.
+
 The first web experience is a minimum end-to-end control plane over the completed
 Society and M4 application-service contracts. A user should be able to select a
 Society scenario, set supported runtime options, preview resolved agents, start a

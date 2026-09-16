@@ -12,6 +12,7 @@ from threading import Event as StopEvent
 from antfarm.adapters.storage import SQLiteStorage
 from antfarm.application.continuous import ContinuousRunner, PacingClock
 from antfarm.application.contracts import (
+    AgentDraftView,
     AgentPage,
     AgentQuery,
     ApplicationError,
@@ -21,6 +22,7 @@ from antfarm.application.contracts import (
     EventPage,
     EventQuery,
     EventView,
+    LocalModelsView,
     ModeView,
     ReplayPage,
     ReplayQuery,
@@ -66,9 +68,10 @@ from antfarm.population import (
     resolve_run_config,
     runtime_overrides_data,
 )
+from antfarm.population_builder import generate_agent_drafts, scenario_agent_drafts
 from antfarm.ports.events import Subscription
 from antfarm.ports.generation import CustomDefinitionGenerator
-from antfarm.ports.models import ModelProvider
+from antfarm.ports.models import ModelInventory, ModelProvider
 from antfarm.ports.storage import Storage
 
 EventViewHandler = Callable[[EventView], None]
@@ -151,11 +154,13 @@ class AntFarmApplication:
         modes: BuiltInModeRegistry | None = None,
         custom_model_providers: Mapping[str, ModelProvider] | None = None,
         custom_definition_generator: CustomDefinitionGenerator | None = None,
+        model_inventory: ModelInventory | None = None,
     ) -> None:
         self._runs: dict[RunId, ApplicationRun] = {}
         self._query_storage = storage
         self._modes = modes or BuiltInModeRegistry()
         self._custom_model_providers = dict(custom_model_providers or {})
+        self._model_inventory = model_inventory
         self._custom_generation = (
             CustomGenerationService(custom_definition_generator)
             if custom_definition_generator is not None
@@ -176,6 +181,39 @@ class AntFarmApplication:
         """Resolve a registered template to its server-owned scenario resource."""
 
         return self._modes.template_source(mode_id, template_id)
+
+    async def discover_local_models(self) -> LocalModelsView:
+        if self._model_inventory is None:
+            return LocalModelsView(
+                runtime="unconfigured",
+                connected=False,
+                models=(),
+                error="local model discovery is not configured",
+            )
+        try:
+            models = tuple(await self._model_inventory.list_installed())
+        except Exception:
+            return LocalModelsView(
+                runtime=self._model_inventory.runtime,
+                connected=False,
+                models=(),
+                error="local model runtime is unavailable",
+            )
+        return LocalModelsView(
+            runtime=self._model_inventory.runtime,
+            connected=True,
+            models=tuple(sorted(dict.fromkeys(models))),
+        )
+
+    def scenario_agent_drafts(
+        self, config: ScenarioConfig
+    ) -> tuple[AgentDraftView, ...]:
+        return scenario_agent_drafts(config)
+
+    def generate_agent_drafts(
+        self, *, count: int, seed: int, model: str
+    ) -> tuple[AgentDraftView, ...]:
+        return generate_agent_drafts(count=count, seed=seed, model=model)
 
     def resolve_custom(
         self,

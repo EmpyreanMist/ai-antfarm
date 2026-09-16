@@ -17,6 +17,8 @@ test("previews, runs, inspects, and safely stops the mock Society", async ({
     "aria-pressed",
     "true",
   );
+  await expect(page.getByText(/Ollama (checking|unavailable|connected)/)).toBeVisible();
+  await expect(page.getByLabel("Population size")).toHaveValue("3");
 
   await page.getByRole("button", { name: "Resolve & preview agents" }).click();
   await expect(page.getByText("Resolved configuration")).toBeVisible();
@@ -53,6 +55,20 @@ test("previews, runs, inspects, and safely stops the mock Society", async ({
   await page.getByLabel("Candidate run").selectOption(candidate);
   await page.getByRole("button", { name: "Compare outcomes" }).click();
   await expect(page.getByText("Comparison ready")).toBeVisible();
+});
+
+test("randomizes and edits a population before preview", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByLabel("Population size")).toHaveValue("3");
+  await page.getByLabel("Population size").fill("2");
+  await page.getByRole("button", { name: "Randomize population" }).click();
+  await expect(page.getByLabel("Agent ID").first()).toHaveValue("agent-1");
+  const generatedName = await page.getByLabel("Display name").first().inputValue();
+  await page.getByRole("button", { name: "Resolve & preview agents" }).click();
+  await expect(page.getByText("2 active agents · seed 97")).toBeVisible();
+  await expect(
+    page.locator(".agent-panel").getByText(generatedName, { exact: true }),
+  ).toBeVisible();
 });
 
 test("edits, validates, previews, and runs a custom definition", async ({ page }) => {

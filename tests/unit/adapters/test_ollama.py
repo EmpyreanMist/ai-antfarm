@@ -25,11 +25,13 @@ def test_ollama_preflight_accepts_installed_models_offline() -> None:
     )
 
     asyncio.run(checker.ensure_available(["gemma4:e2b"]))
+    installed = asyncio.run(checker.list_installed())
 
     assert captured == {
         "url": "http://localhost:11434/api/tags",
         "timeout_seconds": 2,
     }
+    assert installed == ("gemma4:e2b", "qwen3.5:0.8b")
 
 
 def test_ollama_preflight_reports_missing_model_and_installed_models() -> None:

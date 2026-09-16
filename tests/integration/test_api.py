@@ -237,6 +237,64 @@ def test_generation_returns_an_editable_proposal_without_starting_a_run() -> Non
         assert "resolution_id" not in generated.json()
 
 
+def test_local_models_and_web_agent_builder_resolve_without_yaml() -> None:
+    class Inventory:
+        runtime = "ollama"
+
+        async def list_installed(self) -> tuple[str, ...]:
+            return ("gemma4:e2b", "qwen3.5:0.8b")
+
+    with TestClient(
+        create_app(scenario_directory=EXAMPLES, model_inventory=Inventory())
+    ) as client:
+        inventory = client.get("/api/v1/runtimes/local-models")
+        drafts = client.post(
+            "/api/v1/scenarios/live-society-ollama/agent-drafts/generate",
+            json={"count": 2, "seed": 19, "model": "gemma4:e2b"},
+        )
+        assert inventory.json() == {
+            "runtime": "ollama",
+            "connected": True,
+            "models": ["gemma4:e2b", "qwen3.5:0.8b"],
+            "error": None,
+        }
+        assert drafts.status_code == 200, drafts.text
+        agents = drafts.json()["items"]
+        agents[0]["profile"]["identity"]["display_name"] = "Edited Agent"
+        preview = client.post(
+            "/api/v1/scenarios/live-society-ollama/resolve",
+            json={"run_id": "web-built", "agents": agents},
+        )
+
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["active_agent_count"] == 2
+    assert (
+        preview.json()["agents"][0]["public"]["identity"]["display_name"]
+        == "Edited Agent"
+    )
+
+
+def test_local_model_discovery_reports_unavailable_without_leaking_errors() -> None:
+    class UnavailableInventory:
+        runtime = "ollama"
+
+        async def list_installed(self) -> tuple[str, ...]:
+            raise ConnectionError("private endpoint detail")
+
+    with TestClient(
+        create_app(
+            scenario_directory=EXAMPLES,
+            model_inventory=UnavailableInventory(),
+        )
+    ) as client:
+        response = client.get("/api/v1/runtimes/local-models")
+
+    assert response.status_code == 200
+    assert response.json()["connected"] is False
+    assert response.json()["models"] == []
+    assert "private endpoint detail" not in response.text
+
+
 def test_completed_runs_can_be_listed_replayed_and_compared() -> None:
     for client in _client():
         for run_id, seed in (("history-a", 41), ("history-b", 42)):
