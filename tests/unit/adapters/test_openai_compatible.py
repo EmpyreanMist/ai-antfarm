@@ -99,9 +99,7 @@ def test_structured_request_and_response_use_provider_neutral_values() -> None:
 
     response = asyncio.run(provider.generate(_request()))
 
-    assert response == ModelResponse(
-        action_kind="increment", parameters={"amount": 2}
-    )
+    assert response == ModelResponse(action_kind="increment", parameters={"amount": 2})
     assert provider.capabilities.structured_output is True
     assert provider.capabilities.network_required is True
     assert captured["url"] == "http://localhost:11434/v1/chat/completions"
@@ -133,9 +131,7 @@ def test_structured_request_and_response_use_provider_neutral_values() -> None:
         "identity": {"id": "alice"},
         "observation": {"state": {"value": 7}, "tick": 3},
         "private_context": {
-            "memories": [
-                {"content": {"value": 6}, "kind": "action_result"}
-            ],
+            "memories": [{"content": {"value": 6}, "kind": "action_result"}],
             "personality": {
                 "description": "A patient steward.",
                 "traits": {"patience": "high"},
@@ -199,6 +195,40 @@ def test_rich_profile_context_is_compact_and_social_guidance_is_behavioral() -> 
     assert "Do not invent facts" in system_prompt
 
 
+def test_conversation_prompt_is_strictly_grounded_in_configured_context() -> None:
+    request = replace(
+        _request(),
+        observation=Observation(
+            agent_id=AgentId("alice"),
+            tick=Tick(2),
+            state={
+                "conversation_topic": "Whether the group should leave",
+                "conversation_situation": "A storm is approaching",
+                "recent_messages": (),
+            },
+        ),
+        available_actions=(
+            {
+                "kind": "say",
+                "description": "Publish one message.",
+                "parameters": {"text": "Message text."},
+            },
+        ),
+    )
+    provider = OpenAICompatibleModelProvider(
+        base_url="https://models.example/v1",
+        model="test",
+        timeout_seconds=1,
+    )
+
+    body = json.loads(provider._request_body(request))  # noqa: SLF001
+    system_prompt = body["messages"][0]["content"]
+
+    assert "Stay strictly within the conversation_topic" in system_prompt
+    assert "Do not introduce a new setting, task, person, event, rule" in system_prompt
+    assert "ask a relevant question or state uncertainty" in system_prompt
+
+
 @pytest.mark.parametrize(
     "raw_response",
     [
@@ -249,9 +279,7 @@ def test_markdown_fenced_json_response_is_accepted(fence: str) -> None:
     ) -> bytes:
         del url, headers, body, timeout_seconds
         content = f"{fence}\n{decision}\n```"
-        return json.dumps(
-            {"choices": [{"message": {"content": content}}]}
-        ).encode()
+        return json.dumps({"choices": [{"message": {"content": content}}]}).encode()
 
     provider = OpenAICompatibleModelProvider(
         base_url="https://models.example/v1",
@@ -262,9 +290,7 @@ def test_markdown_fenced_json_response_is_accepted(fence: str) -> None:
 
     response = asyncio.run(provider.generate(_request()))
 
-    assert response == ModelResponse(
-        action_kind="increment", parameters={"amount": 2}
-    )
+    assert response == ModelResponse(action_kind="increment", parameters={"amount": 2})
 
 
 def test_malformed_error_does_not_expose_response_content() -> None:
@@ -362,9 +388,7 @@ def test_real_async_transport_reads_a_content_length_response() -> None:
             content = json.dumps(
                 {"action_kind": "increment", "parameters": {"amount": 2}}
             )
-            body = json.dumps(
-                {"choices": [{"message": {"content": content}}]}
-            ).encode()
+            body = json.dumps({"choices": [{"message": {"content": content}}]}).encode()
             writer.write(
                 b"HTTP/1.1 200 OK\r\nContent-Length: "
                 + str(len(body)).encode()

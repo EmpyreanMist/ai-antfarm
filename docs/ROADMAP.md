@@ -562,7 +562,13 @@ per-agent models and profiles, secret motives, and a seeded **Random all** flow.
 Conversation resolution restricts the shared scenario to speech, gives one agent
 the floor per tick, and places the current topic and situation in every bounded
 observation. The live feed renders profile display names while committed events
-remain authoritative.
+remain authoritative. The focused UI keeps topic, situation, cast size, models,
+core character traits, and start action prominent; secondary run and character
+fields are progressively disclosed. A chronological auto-following speech view
+uses named, color-coded bubbles. Conversation model requests add a strict
+grounding instruction: remain inside configured topic, situation, profiles,
+relationships, secrets, and prior committed speech rather than inventing new
+world premises.
 
 **User-visible outcome:** users can start an autonomous multi-agent conversation
 in minutes by choosing models, agents, and a situation or curated preset.

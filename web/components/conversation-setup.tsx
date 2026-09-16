@@ -45,15 +45,14 @@ export function ConversationSetup({ value, onChange, onRandomAll }: Props) {
   return (
     <section className="conversation-setup wide">
       <div className="conversation-heading">
-        <div><p className="eyebrow">Social sandbox</p><h3>What should they talk about?</h3></div>
+        <div><p className="eyebrow">Step 1 · Set the scene</p><h3>What should they talk about?</h3><small>Characters are instructed to stay inside this topic, situation, and their configured profiles.</small></div>
         <button type="button" className="surprise" onClick={surprise}>✦ Random all</button>
       </div>
       <div className="conversation-fields">
-        <label>Preset<select aria-label="Conversation preset" value={selected?.id ?? "custom"} onChange={(event) => choosePreset(event.target.value)}><option value="custom">Custom</option>{CONVERSATION_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select></label>
-        <label>Number of turns<input type="number" min="1" max="100" value={value.turns} onChange={(event) => onChange({ ...value, turns: Number(event.target.value) })} /></label>
+        <div className="preset-grid wide" role="radiogroup" aria-label="Conversation preset">{CONVERSATION_PRESETS.map((preset) => <button type="button" role="radio" aria-checked={selected?.id === preset.id} key={preset.id} onClick={() => choosePreset(preset.id)}>{preset.name}</button>)}</div>
         <label className="wide">Topic<input value={value.topic} onChange={(event) => onChange({ ...value, topic: event.target.value })} /></label>
         <label className="wide">Situation / opening context<textarea rows={3} value={value.situation} onChange={(event) => onChange({ ...value, situation: event.target.value })} /></label>
-        <label>Remember recent messages<input type="number" min="1" max="100" value={value.memory_limit} onChange={(event) => onChange({ ...value, memory_limit: Number(event.target.value) })} /></label>
+        <details className="conversation-advanced wide"><summary>Conversation length and memory</summary><div><label>Number of turns<input type="number" min="1" max="100" value={value.turns} onChange={(event) => onChange({ ...value, turns: Number(event.target.value) })} /></label><label>Remember recent messages<input type="number" min="1" max="100" value={value.memory_limit} onChange={(event) => onChange({ ...value, memory_limit: Number(event.target.value) })} /></label></div></details>
       </div>
     </section>
   );

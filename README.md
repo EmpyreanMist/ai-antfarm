@@ -79,7 +79,12 @@ With Ollama running, choose an installed shared or per-person model, select one 
 the nine situations or write your own, edit each personality and secret motive,
 then press **Start conversation**. **Random all** chooses a situation, seed, and
 complete editable cast in one action. Conversation runs are bounded by the chosen
-number of turns and use committed prior speech as later-agent context.
+number of turns and use committed prior speech as later-agent context. The live
+view presents chronological, named speech bubbles and follows new replies. In
+Conversation mode, the model is explicitly grounded to the configured topic,
+situation, character profile, relationships, private motive, and committed prior
+messages; it is instructed not to invent a different setting, task, person, event,
+or factual premise.
 
 The **Live Society · Ollama** entry uses the configured local model. Start Ollama
 and install the scenario's model before launching it:

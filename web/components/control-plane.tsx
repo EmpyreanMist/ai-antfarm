@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { AgentBuilder } from "@/components/agent-builder";
+import { ConversationFeed } from "@/components/conversation-feed";
 import {
   ConversationSetup,
   DEFAULT_CONVERSATION,
@@ -229,7 +230,7 @@ export function ControlPlane() {
     try {
       const state = await startRun({
         resolution_id: resolution.resolution_id,
-        mode,
+        mode: isConversation ? "bounded" : mode,
         tick_seconds: Number(tickSeconds),
       });
       setRun(state);
@@ -331,9 +332,8 @@ export function ControlPlane() {
             <div><p>Configure</p><h2>Resolve before running</h2></div>
           </div>
           <form className="config-form" onSubmit={preview}>
-            <label>Seed<input value={seed} onChange={(event) => setSeed(event.target.value)} type="number" /></label>
-            <label className="wide">Run ID <span>optional</span><input value={runId} onChange={(event) => setRunId(event.target.value)} placeholder="generated automatically" /></label>
             {isConversation ? <ConversationSetup value={conversation} onChange={(value) => { setConversation(value); setResolution(null); }} onRandomAll={randomizeEverything} /> : null}
+            {isConversation ? <details className="run-advanced wide"><summary>Advanced run settings</summary><div><label>Seed<input value={seed} onChange={(event) => setSeed(event.target.value)} type="number" /></label><label>Run ID <span>optional</span><input value={runId} onChange={(event) => setRunId(event.target.value)} placeholder="generated automatically" /></label></div></details> : <><label>Seed<input value={seed} onChange={(event) => setSeed(event.target.value)} type="number" /></label><label className="wide">Run ID <span>optional</span><input value={runId} onChange={(event) => setRunId(event.target.value)} placeholder="generated automatically" /></label></>}
             {selected ? <AgentBuilder
               key={`${selected.id}-${randomizeNonce}`}
               scenarioId={selected.id}
@@ -342,6 +342,7 @@ export function ControlPlane() {
               initialCount={selected.default_active_agents}
               seed={numberOrUndefined(seed) ?? selected.seed}
               autoRandomize={isConversation && randomizeNonce > 0}
+              conversationMode={isConversation}
               onChange={receiveAgentDrafts}
               onError={receiveBuilderError}
             /> : null}
@@ -352,17 +353,16 @@ export function ControlPlane() {
           </form>
 
           {resolution ? (
-            <div className="launch-panel">
+            <div className={`launch-panel ${isConversation ? "conversation-launch" : ""}`}>
               <div><p className="eyebrow">Resolved configuration</p><strong>{resolution.run_id}</strong><small>{resolution.active_agent_count} active agents · seed {resolution.seed}</small></div>
-              <label>Run mode<select value={mode} onChange={(event) => setMode(event.target.value as "bounded" | "continuous")}><option value="bounded">Bounded</option><option value="continuous">Continuous</option></select></label>
-              <label>Tick pace<input value={tickSeconds} min="0.05" step="0.05" onChange={(event) => setTickSeconds(event.target.value)} type="number" /></label>
-              <button type="button" className="launch" disabled={busy} onClick={start}>Start simulation <span>→</span></button>
+              {!isConversation ? <><label>Run mode<select value={mode} onChange={(event) => setMode(event.target.value as "bounded" | "continuous")}><option value="bounded">Bounded</option><option value="continuous">Continuous</option></select></label><label>Tick pace<input value={tickSeconds} min="0.05" step="0.05" onChange={(event) => setTickSeconds(event.target.value)} type="number" /></label></> : null}
+              <button type="button" className="launch" disabled={busy} onClick={start}>{isConversation ? "Start reviewed conversation" : "Start simulation"} <span>→</span></button>
             </div>
           ) : null}
         </section>
       </section>
 
-      <section className="monitor">
+      <section className={`monitor ${isConversation ? "conversation-monitor" : ""}`}>
         <div className="section-heading">
           <span>03</span>
           <div><p>Observe</p><h2>{isConversation ? "Live conversation" : "Live committed activity"}</h2></div>
@@ -373,22 +373,22 @@ export function ControlPlane() {
           <div><small>Tick</small><strong>{run?.tick ?? 0}</strong></div>
           {run && !TERMINAL.has(run.status) ? <button type="button" className="stop" disabled={busy} onClick={stop}>Stop safely</button> : null}
         </div>
-        <div className="monitor-grid">
-          <div className="feed panel">
+        <div className={`monitor-grid ${isConversation ? "conversation-grid" : ""}`}>
+          {isConversation ? <ConversationFeed agents={agents} conversation={conversation} events={events} run={run} /> : <div className="feed panel">
             <div className="panel-title"><h3>{isConversation ? "Conversation" : "Event feed"}</h3><span>{events.length} shown</span></div>
             {events.length === 0 ? <Empty label="Committed speech and actions will appear here." /> : (
               <ol>{[...events].reverse().map((event) => <li key={event.event_id}><span>t{event.tick}</span><div><strong>{actorName(event.actor_id, agents)}</strong><p>{formatEvent(event)}</p></div><em>#{event.sequence}</em></li>)}</ol>
             )}
-          </div>
+          </div>}
           <div className="inspectors">
             <div className="panel agent-panel">
               <div className="panel-title"><h3>Agents</h3><span>{agents.length}</span></div>
               {agents.length === 0 ? <Empty label="Resolve a scenario to inspect its agents." /> : <div className="agent-grid">{agents.map((agent) => <article key={agent.agent_id}><span>{initials(agent)}</span><div><strong>{displayName(agent)}</strong><small>{agent.model}</small><details><summary>Resolved public/private preview</summary><h4>Public</h4><pre>{JSON.stringify(agent.public, null, 2)}</pre><h4>Complete configuration</h4><pre>{JSON.stringify(agent.configuration, null, 2)}</pre></details></div></article>)}</div>}
             </div>
-            <div className="panel state-panel">
+            {!isConversation ? <div className="panel state-panel">
               <div className="panel-title"><h3>World state</h3><span>tick {snapshot?.tick ?? 0}</span></div>
               {snapshot ? <pre>{JSON.stringify(snapshot.world, null, 2)}</pre> : <Empty label="The latest atomic snapshot will appear here." />}
-            </div>
+            </div> : null}
           </div>
         </div>
       </section>

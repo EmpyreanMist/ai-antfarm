@@ -131,6 +131,12 @@ turn and memory limits. Each agent still receives its own private profile and
 memory through the model port, while prior committed speech becomes bounded
 public observation on later ticks. Presets and browser drafts therefore resolve,
 persist, replay, and compare through the same application lifecycle.
+When the provider adapter detects this speech-only observation shape, it appends
+conversation-specific grounding to the otherwise provider-neutral action prompt.
+The model may use only configured topic, situation, profile/private context,
+relationships, and committed messages as factual premises. This is an explicit
+prompt constraint in addition to the stronger structural constraint that `say`
+is the only available action; environment validation remains authoritative.
 
 ## Simulation Lifecycle
 

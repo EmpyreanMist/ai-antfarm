@@ -77,14 +77,15 @@ test("configures and previews a randomized local-model conversation", async ({ p
   await page.goto("/");
   await expect(page.locator(".mode-picker button", { hasText: "Conversation" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: /Local AI Conversation/ })).toHaveAttribute("aria-pressed", "true");
-  await page.getByLabel("Conversation preset").selectOption("dinner");
+  await page.getByRole("radio", { name: "Dinner party" }).click();
   await expect(page.getByLabel("Topic")).toHaveValue(/ambition or contentment/);
   await page.getByLabel("Population size").fill("2");
-  await page.getByRole("button", { name: "Randomize population" }).click();
-  await expect(page.getByText("Secret motives / private information").first()).toBeVisible();
+  await page.getByRole("button", { name: "Randomize all characters" }).click();
+  await expect(page.getByText("Secret motive (only this character knows)").first()).toBeVisible();
   await page.getByRole("button", { name: "Preview configuration" }).click();
   await expect(page.getByText(/2 active agents/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Start simulation/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Start reviewed conversation/ })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Live conversation" })).toContainText("The room is ready");
 });
 
 test("edits, validates, previews, and runs a custom definition", async ({ page }) => {

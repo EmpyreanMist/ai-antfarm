@@ -29,6 +29,7 @@ type Props = {
   initialCount: number;
   seed: number;
   autoRandomize?: boolean;
+  conversationMode?: boolean;
   onChange: (agents: AgentDraft[]) => void;
   onError: (message: string) => void;
 };
@@ -40,6 +41,7 @@ export function AgentBuilder({
   initialCount,
   seed,
   autoRandomize = false,
+  conversationMode = false,
   onChange,
   onError,
 }: Props) {
@@ -190,16 +192,16 @@ export function AgentBuilder({
   return (
     <div className="agent-builder wide">
       <div className="builder-heading">
-        <div><p className="eyebrow">Shared Agent Builder</p><h3>Population</h3></div>
+        <div><p className="eyebrow">{conversationMode ? "Cast builder" : "Shared Agent Builder"}</p><h3>{conversationMode ? "Characters" : "Population"}</h3></div>
           <div className={`runtime-state ${inventory?.connected ? "connected" : "offline"}`}>
           <span /> Ollama {inventory === null ? "checking" : inventory.connected ? "connected" : "unavailable"}
         </div>
       </div>
       <div className="builder-toolbar">
-        <label>Authoring mode<select value={authoring} onChange={(event) => setAuthoring(event.target.value as typeof authoring)}><option value="manual">Manual</option><option value="random">Random</option><option value="mixed">Mixed</option></select></label>
-        <label>Population size<input aria-label="Population size" type="number" min="1" max="10" value={agents.length || initialCount} onChange={(event) => setPopulationSize(Number(event.target.value))} /></label>
+        {!conversationMode ? <label>Authoring mode<select value={authoring} onChange={(event) => setAuthoring(event.target.value as typeof authoring)}><option value="manual">Manual</option><option value="random">Random</option><option value="mixed">Mixed</option></select></label> : null}
+        <label>{conversationMode ? "Cast size" : "Population size"}<input aria-label="Population size" type="number" min="1" max="10" value={agents.length || initialCount} onChange={(event) => setPopulationSize(Number(event.target.value))} /></label>
         <label>Shared model<select aria-label="Shared model" value={sharedModel} disabled={!modelOptions.length} onChange={(event) => setAllModels(event.target.value)}>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select></label>
-        <button type="button" disabled={busy || !modelOptions.length} onClick={() => void randomizeAll()}>Randomize population</button>
+        <button type="button" disabled={busy || !modelOptions.length} onClick={() => void randomizeAll()}>{conversationMode ? "Randomize all characters" : "Randomize population"}</button>
         <button type="button" disabled={!baseline.length} onClick={() => commit(baseline.map((agent) => structuredClone(agent)))}>Reset all</button>
       </div>
       {runtime === "ollama" && inventory?.connected && inventory.models.length === 0 ? <p className="builder-warning">Ollama is connected but has no installed models.</p> : null}
@@ -212,6 +214,7 @@ export function AgentBuilder({
             index={index}
             models={modelOptions}
             modelEnabled={runtime === "ollama"}
+            conversationMode={conversationMode}
             busy={busy}
             onUpdate={(updated) => commit(agents.map((item, itemIndex) => itemIndex === index ? updated : item))}
             onRandomize={() => void randomizeOne(index)}
@@ -233,6 +236,7 @@ type EditorProps = {
   index: number;
   models: string[];
   modelEnabled: boolean;
+  conversationMode: boolean;
   busy: boolean;
   onUpdate: (agent: AgentDraft) => void;
   onRandomize: () => void;
@@ -241,7 +245,7 @@ type EditorProps = {
   onRemove: () => void;
 };
 
-function AgentEditor({ agent, index, models, modelEnabled, busy, onUpdate, onRandomize, onClone, onReset, onRemove }: EditorProps) {
+function AgentEditor({ agent, index, models, modelEnabled, conversationMode, busy, onUpdate, onRandomize, onClone, onReset, onRemove }: EditorProps) {
   function set(path: string[], value: JsonValue) {
     const profile = structuredClone(agent.profile);
     let cursor = profile as Record<string, JsonValue>;
@@ -254,33 +258,32 @@ function AgentEditor({ agent, index, models, modelEnabled, busy, onUpdate, onRan
     onUpdate({ ...agent, profile });
   }
   const text = (path: string[]) => stringAt(agent.profile, path);
-  return <details className="agent-editor" open={index === 0}>
-    <summary><strong>{text(["identity", "display_name"]) || agent.id}</strong><span>{agent.model ?? "scenario model"}</span></summary>
+  return <details className={`agent-editor ${conversationMode ? "character-card" : ""}`} open={index === 0}>
+    <summary><div className="character-summary"><b>{index + 1}</b><div><strong>{text(["identity", "display_name"]) || agent.id}</strong><small>{text(["personality", "description"]) || "Add a personality"}</small></div></div><span>{agent.model ?? "scenario model"}</span></summary>
     <div className="agent-editor-fields">
-      <label>Agent ID<input value={agent.id} onChange={(event) => onUpdate({ ...agent, id: event.target.value })} /></label>
       <label>Display name<input value={text(["identity", "display_name"])} onChange={(event) => set(["identity", "display_name"], event.target.value)} /></label>
+      {modelEnabled ? <label>Model<select value={agent.model ?? ""} onChange={(event) => onUpdate({ ...agent, model: event.target.value })}>{models.map((model) => <option key={model} value={model}>{model}</option>)}</select></label> : null}
       <label className="wide">Identity description<textarea rows={2} value={text(["identity", "description"])} onChange={(event) => set(["identity", "description"], event.target.value)} /></label>
       <label className="wide">Personality<textarea rows={2} value={text(["personality", "description"])} onChange={(event) => set(["personality", "description"], event.target.value)} /></label>
-      <ListField label="Qualities" value={arrayAt(agent.profile, ["personality", "qualities"])} onChange={(value) => set(["personality", "qualities"], value)} />
       <ListField label="Goals" value={arrayAt(agent.profile, ["goals"])} onChange={(value) => set(["goals"], value)} />
       <ListField label="Beliefs" value={arrayAt(agent.profile, ["beliefs"])} onChange={(value) => set(["beliefs"], value)} />
       <ListField label="Values" value={arrayAt(agent.profile, ["values"])} onChange={(value) => set(["values"], value)} />
       <label>Communication style<input value={text(["communication_preferences", "style"])} onChange={(event) => set(["communication_preferences", "style"], event.target.value)} /></label>
-      <ListField label="Communication preferences" value={arrayAt(agent.profile, ["communication_preferences", "preferences"])} onChange={(value) => set(["communication_preferences", "preferences"], value)} />
-      {modelEnabled ? <label>Model<select value={agent.model ?? ""} onChange={(event) => onUpdate({ ...agent, model: event.target.value })}>{models.map((model) => <option key={model} value={model}>{model}</option>)}</select></label> : null}
-      <label>Cognition interval<input type="number" min="1" value={agent.cognition_interval ?? ""} onChange={(event) => onUpdate({ ...agent, cognition_interval: event.target.value ? Number(event.target.value) : null })} /></label>
-      <details className="wide trait-editor"><summary>Behavioral traits</summary><div>{TRAITS.map((trait) => <label key={trait}>{trait.replaceAll("_", " ")}<input type="range" min="0" max="1" step="0.01" value={numberAt(agent.profile, ["behavioral_traits", trait], .5)} onChange={(event) => set(["behavioral_traits", trait], Number(event.target.value))} /><output>{numberAt(agent.profile, ["behavioral_traits", trait], .5).toFixed(2)}</output></label>)}</div></details>
-      <label>Money<input type="number" min="0" value={numberAt(agent.profile, ["economics", "money"], 0)} onChange={(event) => set(["economics", "money"], Number(event.target.value))} /></label>
-      <label>Recurring income<input type="number" min="0" value={numberAt(agent.profile, ["economics", "recurring_income"], 0)} onChange={(event) => set(["economics", "recurring_income"], Number(event.target.value))} /></label>
-      <label>Occupation<input value={text(["economics", "occupation"])} onChange={(event) => set(["economics", "occupation"], event.target.value)} /></label>
-      <MapField label="Resources / items" value={objectAt(agent.profile, ["economics", "resources"])} onChange={(value) => set(["economics", "resources"], value)} />
-      <label>Social status<input value={text(["social_status", "label"])} onChange={(event) => set(["social_status", "label"], event.target.value)} /></label>
-      <ListField label="Social roles" value={arrayAt(agent.profile, ["social_status", "roles"])} onChange={(value) => set(["social_status", "roles"], value)} />
-      <label>Reputation score<input type="range" min="0" max="1" step="0.01" value={numberAt(agent.profile, ["reputation", "score"], .5)} onChange={(event) => set(["reputation", "score"], Number(event.target.value))} /></label>
-      <ListField label="Reputation labels" value={arrayAt(agent.profile, ["reputation", "labels"])} onChange={(value) => set(["reputation", "labels"], value)} />
-      <RelationshipField value={objectAt(agent.profile, ["relationships"])} onChange={(value) => set(["relationships"], value)} />
-      <details className="wide visibility-editor"><summary>Public / private visibility</summary><div>{VISIBILITY.map((field) => <label key={field}>{field.replaceAll("_", " ")}<select value={text(["visibility", field]) || "private"} onChange={(event) => set(["visibility", field], event.target.value)}><option value="private">Private</option><option value="public">Public</option></select></label>)}</div></details>
-      <ListField label="Secret motives / private information" value={arrayAt(agent.profile, ["private_information"])} onChange={(value) => set(["private_information"], value)} />
+      <ListField label={conversationMode ? "Secret motive (only this character knows)" : "Secret motives / private information"} value={arrayAt(agent.profile, ["private_information"])} onChange={(value) => set(["private_information"], value)} />
+      <details className="wide character-advanced"><summary>Advanced character settings</summary><div className="agent-editor-fields">
+        <label>Agent ID<input value={agent.id} onChange={(event) => onUpdate({ ...agent, id: event.target.value })} /></label>
+        {!conversationMode ? <label>Cognition interval<input type="number" min="1" value={agent.cognition_interval ?? ""} onChange={(event) => onUpdate({ ...agent, cognition_interval: event.target.value ? Number(event.target.value) : null })} /></label> : null}
+        <ListField label="Qualities" value={arrayAt(agent.profile, ["personality", "qualities"])} onChange={(value) => set(["personality", "qualities"], value)} />
+        <ListField label="Communication preferences" value={arrayAt(agent.profile, ["communication_preferences", "preferences"])} onChange={(value) => set(["communication_preferences", "preferences"], value)} />
+        <details className="wide trait-editor"><summary>Behavioral traits</summary><div>{TRAITS.map((trait) => <label key={trait}>{trait.replaceAll("_", " ")}<input type="range" min="0" max="1" step="0.01" value={numberAt(agent.profile, ["behavioral_traits", trait], .5)} onChange={(event) => set(["behavioral_traits", trait], Number(event.target.value))} /><output>{numberAt(agent.profile, ["behavioral_traits", trait], .5).toFixed(2)}</output></label>)}</div></details>
+        {!conversationMode ? <><label>Money<input type="number" min="0" value={numberAt(agent.profile, ["economics", "money"], 0)} onChange={(event) => set(["economics", "money"], Number(event.target.value))} /></label><label>Recurring income<input type="number" min="0" value={numberAt(agent.profile, ["economics", "recurring_income"], 0)} onChange={(event) => set(["economics", "recurring_income"], Number(event.target.value))} /></label><label>Occupation<input value={text(["economics", "occupation"])} onChange={(event) => set(["economics", "occupation"], event.target.value)} /></label><MapField label="Resources / items" value={objectAt(agent.profile, ["economics", "resources"])} onChange={(value) => set(["economics", "resources"], value)} /></> : null}
+        <label>Social status<input value={text(["social_status", "label"])} onChange={(event) => set(["social_status", "label"], event.target.value)} /></label>
+        <ListField label="Social roles" value={arrayAt(agent.profile, ["social_status", "roles"])} onChange={(value) => set(["social_status", "roles"], value)} />
+        <label>Reputation score<input type="range" min="0" max="1" step="0.01" value={numberAt(agent.profile, ["reputation", "score"], .5)} onChange={(event) => set(["reputation", "score"], Number(event.target.value))} /></label>
+        <ListField label="Reputation labels" value={arrayAt(agent.profile, ["reputation", "labels"])} onChange={(value) => set(["reputation", "labels"], value)} />
+        <RelationshipField value={objectAt(agent.profile, ["relationships"])} onChange={(value) => set(["relationships"], value)} />
+        {!conversationMode ? <details className="wide visibility-editor"><summary>Public / private visibility</summary><div>{VISIBILITY.map((field) => <label key={field}>{field.replaceAll("_", " ")}<select value={text(["visibility", field]) || "private"} onChange={(event) => set(["visibility", field], event.target.value)}><option value="private">Private</option><option value="public">Public</option></select></label>)}</div></details> : null}
+      </div></details>
     </div>
     <div className="agent-actions"><button type="button" disabled={busy} onClick={onRandomize}>Randomize</button><button type="button" onClick={onClone}>Clone</button><button type="button" onClick={onReset}>Reset</button><button type="button" onClick={onRemove}>Remove</button></div>
   </details>;
