@@ -59,6 +59,13 @@ export type LocalModels = {
   error: string | null;
 };
 
+export type ConversationSettings = {
+  topic: string;
+  situation: string;
+  turns: number;
+  memory_limit: number;
+};
+
 export type Resolution = {
   resolution_id: string;
   scenario_id: string;
@@ -176,6 +183,7 @@ export type ResolveInput = {
   profiles?: Record<string, Record<string, JsonValue>>;
   model_assignments?: Record<string, string>;
   agents?: AgentDraft[];
+  conversation?: ConversationSettings;
 };
 
 export type StartInput = {

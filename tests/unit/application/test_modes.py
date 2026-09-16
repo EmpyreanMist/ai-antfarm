@@ -9,8 +9,8 @@ def test_society_mode_exposes_immutable_capabilities_and_templates() -> None:
 
     modes = application.list_modes()
 
-    assert len(modes) == 1
-    society = modes[0]
+    assert len(modes) == 2
+    society = next(mode for mode in modes if mode.id == "society")
     assert society.id == "society"
     assert "economics" in society.capabilities
     assert "public_speech" in society.capabilities
@@ -29,6 +29,12 @@ def test_society_mode_exposes_immutable_capabilities_and_templates() -> None:
         "run_mode",
         "tick_seconds",
     )
+    conversation = next(mode for mode in modes if mode.id == "conversation")
+    assert conversation.templates[0].id == "conversation-ollama"
+    assert "private_motives" in conversation.capabilities
+    presets = conversation.configuration_hints["presets"]
+    assert isinstance(presets, tuple)
+    assert "jury_deliberation" in presets
 
 
 def test_unknown_mode_and_template_use_stable_not_found_errors() -> None:

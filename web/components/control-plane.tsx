@@ -3,10 +3,15 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { AgentBuilder } from "@/components/agent-builder";
+import {
+  ConversationSetup,
+  DEFAULT_CONVERSATION,
+} from "@/components/conversation-setup";
 
 import {
   Agent,
   AgentDraft,
+  ConversationSettings,
   eventStreamUrl,
   GameMode,
   inspectRun,
@@ -41,11 +46,14 @@ export function ControlPlane() {
   const [agentDrafts, setAgentDrafts] = useState<AgentDraft[]>([]);
   const [mode, setMode] = useState<"bounded" | "continuous">("bounded");
   const [tickSeconds, setTickSeconds] = useState("1");
+  const [conversation, setConversation] = useState<ConversationSettings>(DEFAULT_CONVERSATION);
+  const [randomizeNonce, setRandomizeNonce] = useState(0);
   const lastSequence = useRef(0);
   const terminalRun = useRef(false);
 
   const selected = scenarios.find((scenario) => scenario.id === selectedId);
   const selectedMode = modes.find((item) => item.id === selectedModeId);
+  const isConversation = selectedModeId === "conversation";
 
   useEffect(() => {
     let active = true;
@@ -53,7 +61,8 @@ export function ControlPlane() {
       .then((items) => {
         if (!active) return;
         setModes(items);
-        if (items[0]) setSelectedModeId(items[0].id);
+        const preferred = items.find((item) => item.id === "conversation") ?? items[0];
+        if (preferred) setSelectedModeId(preferred.id);
       })
       .catch((reason: unknown) => {
         if (active) setError(errorMessage(reason));
@@ -91,6 +100,7 @@ export function ControlPlane() {
     setEvents([]);
     setAgents([]);
     setSnapshot(null);
+    setRandomizeNonce(0);
     lastSequence.current = 0;
     terminalRun.current = true;
   }, [selected]);
@@ -164,6 +174,7 @@ export function ControlPlane() {
         seed: numberOrUndefined(seed),
         run_id: runId.trim() || undefined,
         agents: agentDrafts,
+        conversation: isConversation ? conversation : undefined,
       });
       setResolution(resolved);
       setAgents(resolved.agents);
@@ -172,6 +183,43 @@ export function ControlPlane() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function startConversation() {
+    if (!selected || agentDrafts.length === 0) return;
+    setBusy(true);
+    setError("");
+    try {
+      const resolved = await resolveScenario(selected.id, {
+        seed: numberOrUndefined(seed),
+        run_id: runId.trim() || undefined,
+        agents: agentDrafts,
+        conversation,
+      });
+      setAgents(resolved.agents);
+      const state = await startRun({
+        resolution_id: resolved.resolution_id,
+        mode: "bounded",
+        tick_seconds: Number(tickSeconds),
+      });
+      setRun(state);
+      setEvents([]);
+      setResolution(null);
+      lastSequence.current = 0;
+      terminalRun.current = false;
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function randomizeEverything() {
+    const values = new Uint32Array(1);
+    crypto.getRandomValues(values);
+    setSeed(String(values[0]));
+    setRandomizeNonce((current) => current + 1);
+    setResolution(null);
   }
 
   async function start() {
@@ -216,11 +264,11 @@ export function ControlPlane() {
     <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">AntFarm / minimum web control plane</p>
-          <h1>Run a society.<br />Watch it become.</h1>
+          <p className="eyebrow">AntFarm / local AI social sandbox</p>
+          <h1>Build the cast.<br />Let them talk.</h1>
           <p className="lede">
-            Choose a game mode, resolve its agents, and observe
-            only events committed by the authoritative simulation server.
+            Choose local models, shape every personality, set the situation,
+            and watch autonomous characters react to one another.
           </p>
         </div>
         <div className="boundary-note">
@@ -285,18 +333,22 @@ export function ControlPlane() {
           <form className="config-form" onSubmit={preview}>
             <label>Seed<input value={seed} onChange={(event) => setSeed(event.target.value)} type="number" /></label>
             <label className="wide">Run ID <span>optional</span><input value={runId} onChange={(event) => setRunId(event.target.value)} placeholder="generated automatically" /></label>
+            {isConversation ? <ConversationSetup value={conversation} onChange={(value) => { setConversation(value); setResolution(null); }} onRandomAll={randomizeEverything} /> : null}
             {selected ? <AgentBuilder
+              key={`${selected.id}-${randomizeNonce}`}
               scenarioId={selected.id}
               runtime={selected.runtime}
               configuredModels={selected.models}
               initialCount={selected.default_active_agents}
               seed={numberOrUndefined(seed) ?? selected.seed}
+              autoRandomize={isConversation && randomizeNonce > 0}
               onChange={receiveAgentDrafts}
               onError={receiveBuilderError}
             /> : null}
-            <button className="primary wide" disabled={busy || !selected || agentDrafts.length === 0} type="submit">
-              {busy ? "Resolving…" : "Resolve & preview agents"}
-            </button>
+            {isConversation ? <>
+              <button className="preview-button" disabled={busy || !selected || agentDrafts.length === 0} type="submit">Preview configuration</button>
+              <button className="primary" disabled={busy || !selected || agentDrafts.length === 0} type="button" onClick={() => void startConversation()}>{busy ? "Starting…" : "Start conversation →"}</button>
+            </> : <button className="primary wide" disabled={busy || !selected || agentDrafts.length === 0} type="submit">{busy ? "Resolving…" : "Resolve & preview agents"}</button>}
           </form>
 
           {resolution ? (
@@ -313,7 +365,7 @@ export function ControlPlane() {
       <section className="monitor">
         <div className="section-heading">
           <span>03</span>
-          <div><p>Observe</p><h2>Live committed activity</h2></div>
+          <div><p>Observe</p><h2>{isConversation ? "Live conversation" : "Live committed activity"}</h2></div>
         </div>
         <div className="run-strip">
           <div><small>Status</small><strong className={`status ${run?.status ?? "idle"}`}>{run?.status ?? "idle"}</strong></div>
@@ -323,9 +375,9 @@ export function ControlPlane() {
         </div>
         <div className="monitor-grid">
           <div className="feed panel">
-            <div className="panel-title"><h3>Event feed</h3><span>{events.length} shown</span></div>
+            <div className="panel-title"><h3>{isConversation ? "Conversation" : "Event feed"}</h3><span>{events.length} shown</span></div>
             {events.length === 0 ? <Empty label="Committed speech and actions will appear here." /> : (
-              <ol>{[...events].reverse().map((event) => <li key={event.event_id}><span>t{event.tick}</span><div><strong>{event.actor_id ?? "system"}</strong><p>{formatEvent(event)}</p></div><em>#{event.sequence}</em></li>)}</ol>
+              <ol>{[...events].reverse().map((event) => <li key={event.event_id}><span>t{event.tick}</span><div><strong>{actorName(event.actor_id, agents)}</strong><p>{formatEvent(event)}</p></div><em>#{event.sequence}</em></li>)}</ol>
             )}
           </div>
           <div className="inspectors">
@@ -372,6 +424,12 @@ function displayName(agent: Agent): string {
 
 function initials(agent: Agent): string {
   return displayName(agent).split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function actorName(actorId: string | null, agents: Agent[]): string {
+  if (actorId === null) return "system";
+  const agent = agents.find((item) => item.agent_id === actorId);
+  return agent ? displayName(agent) : actorId.replaceAll("-", " ");
 }
 
 function formatEvent(event: SimulationEvent): string {

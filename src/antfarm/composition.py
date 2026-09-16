@@ -111,11 +111,7 @@ def _public_profile(config: AgentProfileConfig) -> PublicAgentProfile | None:
 
     economics = None
     if config.economics is not None:
-        money = (
-            config.economics.money
-            if config.visibility.wealth == "public"
-            else None
-        )
+        money = config.economics.money if config.visibility.wealth == "public" else None
         recurring_income = (
             config.economics.recurring_income
             if config.visibility.wealth == "public"
@@ -216,9 +212,7 @@ def compose(
         "contribute": {
             "kind": "contribute",
             "description": "Move resource from your holding into the commons.",
-            "parameters": {
-                "amount": "A positive integer no greater than own_holding."
-            },
+            "parameters": {"amount": "A positive integer no greater than own_holding."},
         },
         "say": {
             "kind": "say",
@@ -389,9 +383,7 @@ def compose(
         seed=config.run.seed,
         agents=agents,
         environment=environment,
-        memory=InMemoryMemoryStore(
-            max_items_per_agent=config.memory.retention_limit
-        ),
+        memory=InMemoryMemoryStore(max_items_per_agent=config.memory.retention_limit),
         scheduler=StableScheduler(
             interval=config.scheduling.interval,
             cooldown=config.scheduling.cooldown,
@@ -402,12 +394,8 @@ def compose(
                 if agent.cognition_interval is not None
             },
             stagger=config.scheduling.stagger,
-            max_cognitions_per_tick=(
-                config.scheduling.max_cognitions_per_tick
-            ),
-            failure_retry_cooldown_max=(
-                config.scheduling.failure_retry_cooldown_max
-            ),
+            max_cognitions_per_tick=(config.scheduling.max_cognitions_per_tick),
+            failure_retry_cooldown_max=(config.scheduling.failure_retry_cooldown_max),
         ),
         event_bus=event_bus,
         storage=storage,
@@ -473,6 +461,16 @@ def build_environment(config: ScenarioConfig) -> Environment:
                 config.environment.social.roster_limit
                 if config.environment.social is not None
                 else 100
+            ),
+            topic=(
+                config.environment.social.topic
+                if config.environment.social is not None
+                else None
+            ),
+            situation=(
+                config.environment.social.situation
+                if config.environment.social is not None
+                else None
             ),
         )
     return CounterEnvironment(

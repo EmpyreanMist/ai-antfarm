@@ -135,6 +135,12 @@ profiles, assign a shared or per-agent model, and inspect the resolved public an
 private configuration before a run. These web-authored agents are normalized into
 the same validated `ScenarioConfig` used by CLI and API runs.
 
+M12 turns that foundation into an Ollama-first social sandbox. A user can choose
+a situation or preset, shape or randomize a cast with private motives, and start
+an autonomous multi-agent conversation directly from the browser. Conversation
+remains a specialization of the authoritative Society engine rather than an
+untracked chat loop.
+
 The first web experience is a minimum end-to-end control plane over the completed
 Society and M4 application-service contracts. A user should be able to select a
 Society scenario, set supported runtime options, preview resolved agents, start a

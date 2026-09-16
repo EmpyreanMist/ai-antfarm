@@ -11,10 +11,16 @@ from pydantic import ValidationError
 from antfarm.config import load_scenario
 from antfarm.config.schema import (
     BehavioralTraitsConfig,
+    CommonsEnvironmentConfig,
     PopulationConfig,
     ScenarioConfig,
 )
-from antfarm.population import RuntimeOverrides, WebAgentDraft, resolve_run_config
+from antfarm.population import (
+    ConversationSettings,
+    RuntimeOverrides,
+    WebAgentDraft,
+    resolve_run_config,
+)
 
 
 def _scenario_data() -> dict[str, object]:
@@ -59,6 +65,35 @@ def _full_generated(seed: int = 41) -> ScenarioConfig:
         },
     }
     return ScenarioConfig.model_validate(data)
+
+
+def test_conversation_settings_create_a_bounded_speech_only_turn_loop() -> None:
+    source = load_scenario("scenarios/examples/conversation-ollama.yaml")
+
+    resolved = resolve_run_config(
+        source,
+        RuntimeOverrides(
+            conversation=ConversationSettings(
+                topic="Should the expedition continue?",
+                situation="A storm is approaching and supplies are low.",
+                turns=17,
+                memory_limit=9,
+            )
+        ),
+    )
+
+    assert resolved.run.ticks == 17
+    assert [action.kind for action in resolved.actions] == ["say"]
+    assert resolved.memory.recall_limit == 9
+    assert resolved.scheduling.interval == 1
+    assert resolved.scheduling.max_cognitions_per_tick == 1
+    assert all(agent.cognition_interval == 1 for agent in resolved.agents)
+    assert isinstance(resolved.environment, CommonsEnvironmentConfig)
+    social = resolved.environment.social
+    assert social is not None
+    assert social.topic == "Should the expedition continue?"
+    assert social.situation is not None
+    assert social.situation.startswith("A storm")
 
 
 def test_fully_generated_population_is_materialized_and_reproducible() -> None:

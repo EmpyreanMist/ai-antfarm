@@ -50,6 +50,7 @@ class RuntimeOverrides:
     model_assignments: Mapping[str, str] = field(default_factory=dict)
     model: str | None = None
     web_agents: Sequence[WebAgentDraft] | None = None
+    conversation: ConversationSettings | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +61,24 @@ class WebAgentDraft:
     profile: Mapping[str, object]
     model: str | None = None
     cognition_interval: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationSettings:
+    """Bounded social-sandbox choices applied to an ordinary Society scenario."""
+
+    topic: str
+    situation: str
+    turns: int = 12
+    memory_limit: int = 20
+
+    def __post_init__(self) -> None:
+        if not self.topic.strip() or not self.situation.strip():
+            raise ValueError("conversation topic and situation must not be empty")
+        if not 1 <= self.turns <= 100:
+            raise ValueError("conversation turns must be between 1 and 100")
+        if not 1 <= self.memory_limit <= 100:
+            raise ValueError("conversation memory limit must be between 1 and 100")
 
 
 def runtime_overrides_data(overrides: RuntimeOverrides | None) -> JsonObject:
@@ -91,6 +110,13 @@ def runtime_overrides_data(overrides: RuntimeOverrides | None) -> JsonObject:
             }
             for agent in overrides.web_agents
         )
+    if overrides.conversation is not None:
+        data["conversation"] = {
+            "topic": overrides.conversation.topic,
+            "situation": overrides.conversation.situation,
+            "turns": overrides.conversation.turns,
+            "memory_limit": overrides.conversation.memory_limit,
+        }
     return freeze_object(data)
 
 
@@ -112,6 +138,8 @@ def resolve_run_config(
     data = source.model_dump(mode="json", exclude_none=True)
     if requested.web_agents is not None:
         _apply_web_agents(data, source, requested.web_agents)
+    if requested.conversation is not None:
+        _apply_conversation(data, requested.conversation)
     if requested.population is not None:
         data["population"] = requested.population.model_dump(
             mode="json", exclude_none=True
@@ -165,9 +193,7 @@ def resolve_run_config(
                     generated_profile, profiles[profile_ref]
                 )
             if profile_patch is not None:
-                generated_profile = _deep_merge(
-                    generated_profile, dict(profile_patch)
-                )
+                generated_profile = _deep_merge(generated_profile, dict(profile_patch))
             profile_ref = f"resolved-{agent.id}"
             if profile_ref in profiles and profile_ref != agent.profile_ref:
                 raise ValueError(
@@ -214,6 +240,34 @@ def resolve_run_config(
     return resolved_config
 
 
+def _apply_conversation(
+    data: dict[str, object], settings: ConversationSettings
+) -> None:
+    environment = cast(dict[str, object], data["environment"])
+    social = environment.get("social")
+    if environment.get("kind") != "commons" or not isinstance(social, dict):
+        raise ValueError("conversation requires a social commons scenario")
+    social["topic"] = settings.topic.strip()
+    social["situation"] = settings.situation.strip()
+    social["history_limit"] = settings.memory_limit
+    data["actions"] = [{"kind": "say"}]
+    run = cast(dict[str, object], data["run"])
+    run["ticks"] = settings.turns
+    memory = cast(dict[str, object], data["memory"])
+    memory["recall_limit"] = settings.memory_limit
+    memory["retention_limit"] = max(settings.memory_limit, settings.turns)
+    scheduling = cast(dict[str, object], data["scheduling"])
+    scheduling.update(
+        interval=1,
+        stagger=True,
+        max_cognitions_per_tick=1,
+        event_kinds=[],
+    )
+    agents = cast(list[dict[str, object]], data["agents"])
+    for agent in agents:
+        agent["cognition_interval"] = 1
+
+
 def _apply_web_agents(
     data: dict[str, object],
     source: ScenarioConfig,
@@ -242,8 +296,7 @@ def _apply_web_agents(
             provider = source.providers[template_model.provider_ref]
             if not isinstance(provider, OpenAICompatibleProviderConfig):
                 raise ValueError(
-                    "installed model assignment requires an OpenAI-compatible "
-                    "scenario"
+                    "installed model assignment requires an OpenAI-compatible scenario"
                 )
             key = (template.model_ref, draft.model)
             model_ref = generated_models.setdefault(
@@ -319,9 +372,7 @@ def _generate_profile(
 ) -> dict[str, object]:
     profile: dict[str, object] = {}
     if config.behavioral_traits is not None:
-        profile["behavioral_traits"] = _generate_traits(
-            config.behavioral_traits, rng
-        )
+        profile["behavioral_traits"] = _generate_traits(config.behavioral_traits, rng)
     if config.economics is not None:
         economics: dict[str, object] = {}
         if config.economics.money is not None:

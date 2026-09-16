@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This is the active plan from the completed M0-M11 baseline onward. The detailed
+This is the active plan from the completed M0-M12 baseline onward. The detailed
 M0-M2 implementation history is preserved unchanged in
 [`ROADMAP_old.md`](ROADMAP_old.md). Completed work is summarized here only where
 it establishes a dependency or constraint for future work.
@@ -553,6 +553,16 @@ reasoning. Manual acceptance: select an installed Ollama model, randomize severa
 agents, edit and clone one, inspect visibility, then run them from the browser.
 
 ## M12: Conversation / Social Sandbox Mode
+
+**Status: Complete.** Conversation is a registered Ollama-first Game Mode over
+the existing deterministic engine, Agent Builder, public speech, memory, event,
+replay, and visibility contracts. The web app opens on a one-click social
+sandbox with editable topic, situation, turn count, memory, nine curated presets,
+per-agent models and profiles, secret motives, and a seeded **Random all** flow.
+Conversation resolution restricts the shared scenario to speech, gives one agent
+the floor per tick, and places the current topic and situation in every bounded
+observation. The live feed renders profile display names while committed events
+remain authoritative.
 
 **User-visible outcome:** users can start an autonomous multi-agent conversation
 in minutes by choosing models, agents, and a situation or curated preset.

@@ -123,6 +123,15 @@ derive provider-backed model configurations, and normalize into the same
 `ScenarioConfig`, inspection, persistence, preflight, and composition path used
 by YAML and CLI scenarios. A web draft is not a second domain agent type.
 
+Conversation is a registered Game Mode, not a parallel chat runtime. A bounded
+conversation override specializes an ordinary social-commons scenario by
+supplying validated topic and situation context, allowing only the existing
+public `say` action, selecting one scheduled cognition per tick, and configuring
+turn and memory limits. Each agent still receives its own private profile and
+memory through the model port, while prior committed speech becomes bounded
+public observation on later ticks. Presets and browser drafts therefore resolve,
+persist, replay, and compare through the same application lifecycle.
+
 ## Simulation Lifecycle
 
 ```text

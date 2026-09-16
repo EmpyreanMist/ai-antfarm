@@ -34,6 +34,8 @@ class CommonsEnvironment:
         message_max_length: int = 500,
         history_limit: int = 20,
         roster_limit: int = 100,
+        topic: str | None = None,
+        situation: str | None = None,
     ) -> None:
         if initial_resource < 0 or initial_endowment < 0:
             raise ValueError("commons initial values must not be negative")
@@ -62,6 +64,8 @@ class CommonsEnvironment:
         self._message_max_length = message_max_length
         self._history_limit = history_limit
         self._roster_limit = roster_limit
+        self._topic = topic
+        self._situation = situation
         self._messages: list[JsonObject] = []
         self._next_message_sequence = 1
 
@@ -87,6 +91,10 @@ class CommonsEnvironment:
                     if _message_tick(message) < int(tick)
                 ),
             )
+            if self._topic is not None:
+                state["conversation_topic"] = self._topic
+            if self._situation is not None:
+                state["conversation_situation"] = self._situation
         return Observation(
             agent_id=agent_id,
             tick=tick,

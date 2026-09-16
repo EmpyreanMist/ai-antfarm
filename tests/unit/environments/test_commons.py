@@ -13,6 +13,23 @@ from antfarm.domain.json_values import JsonObject
 from antfarm.environments import CommonsEnvironment
 
 
+def test_social_observation_contains_conversation_context() -> None:
+    alice = AgentId("alice")
+    environment = CommonsEnvironment(
+        initial_resource=0,
+        initial_endowment=0,
+        agent_ids=(alice,),
+        social=True,
+        topic="What should we do?",
+        situation="The group is stranded.",
+    )
+
+    state = environment.observe(alice, Tick(1)).state
+
+    assert state["conversation_topic"] == "What should we do?"
+    assert state["conversation_situation"] == "The group is stranded."
+
+
 def test_harvest_and_contribute_preserve_resource_accounting() -> None:
     alice = AgentId("alice")
     bob = AgentId("bob")

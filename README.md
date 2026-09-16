@@ -42,7 +42,7 @@ The foundation currently includes:
 - A Next.js Society control plane for preview, live events, stop, and inspection
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M11 are complete. See
+M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M12 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Web Control Plane
@@ -65,7 +65,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. The default **Live Society · Mock** scenario needs
+Open `http://localhost:3000`. The Society mode's **Live Society · Mock** scenario needs
 no model runtime: select it, adjust the seed, build or deterministically randomize
 the population in the **Shared Agent Builder**, choose **Resolve & preview
 agents**, then start a bounded or continuous run. Generated and manual agents use
@@ -73,6 +73,13 @@ the same editable profile fields. The resolved inspector shows both explicitly
 public data and the complete configuring-user view before launch. Committed
 speech/actions and the latest atomic world snapshot appear in the browser. Use
 **Stop safely** to end a continuous run.
+
+The default landing experience is now **Conversation → Local AI Conversation**.
+With Ollama running, choose an installed shared or per-person model, select one of
+the nine situations or write your own, edit each personality and secret motive,
+then press **Start conversation**. **Random all** chooses a situation, seed, and
+complete editable cast in one action. Conversation runs are bounded by the chosen
+number of turns and use committed prior speech as later-agent context.
 
 The **Live Society · Ollama** entry uses the configured local model. Start Ollama
 and install the scenario's model before launching it:

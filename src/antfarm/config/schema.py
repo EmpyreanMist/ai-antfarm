@@ -122,9 +122,7 @@ class BehavioralTraitsConfig(StrictModel):
 
     @model_validator(mode="after")
     def is_not_empty(self) -> Self:
-        if not any(
-            getattr(self, name) is not None for name in type(self).model_fields
-        ):
+        if not any(getattr(self, name) is not None for name in type(self).model_fields):
             raise ValueError("behavioral traits must not be empty")
         return self
 
@@ -400,6 +398,8 @@ class CommonsSocialConfig(StrictModel):
     message_max_length: PositiveInt = 500
     history_limit: PositiveInt = 20
     roster_limit: PositiveInt = 100
+    topic: ProfileText | None = None
+    situation: ProfileText | None = None
 
 
 class CommonsEnvironmentConfig(StrictModel):
@@ -528,9 +528,8 @@ class ScenarioConfig(StrictModel):
                 raise ValueError(
                     f"population randomization references unknown agents: {names}"
                 )
-        if (
-            self.run.active_agents is not None
-            and self.run.active_agents > len(expanded_agents)
+        if self.run.active_agents is not None and self.run.active_agents > len(
+            expanded_agents
         ):
             raise ValueError(
                 "active agent count exceeds the configured population of "

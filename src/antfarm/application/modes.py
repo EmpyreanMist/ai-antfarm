@@ -130,7 +130,66 @@ SOCIETY_MODE = BuiltInModeDefinition(
     templates=SOCIETY_TEMPLATES,
 )
 
-BUILT_IN_MODES = (SOCIETY_MODE,)
+CONVERSATION_TEMPLATES = (
+    ModeTemplateDefinition(
+        ScenarioTemplateView(
+            "conversation-ollama",
+            "Local AI Conversation",
+            "Choose local models and let a custom cast talk autonomously.",
+            "ollama",
+            True,
+        ),
+        "conversation-ollama.yaml",
+    ),
+)
+
+CONVERSATION_MODE = BuiltInModeDefinition(
+    view=ModeView(
+        id="conversation",
+        name="Conversation",
+        description=(
+            "Create a cast, choose a situation, and watch local AI characters "
+            "talk to each other turn by turn."
+        ),
+        capabilities=(
+            "agent_builder",
+            "local_models",
+            "private_motives",
+            "public_speech",
+            "relationships",
+            "seeded_random_cast",
+        ),
+        configuration_hints={
+            "runtime_options": (
+                "seed",
+                "run_id",
+                "agents",
+                "conversation",
+                "run_mode",
+                "tick_seconds",
+            ),
+            "presets": (
+                "open_conversation",
+                "dinner_party",
+                "heated_debate",
+                "hostile_negotiation",
+                "philosophical_discussion",
+                "jury_deliberation",
+                "stranded_group",
+                "rival_factions",
+                "team_planning",
+            ),
+        },
+        visualization_hints={
+            "primary": "conversation_feed",
+            "inspectors": ("cast", "private_configuration"),
+        },
+        templates=tuple(template.view for template in CONVERSATION_TEMPLATES),
+    ),
+    templates=CONVERSATION_TEMPLATES,
+)
+
+BUILT_IN_MODES = (SOCIETY_MODE, CONVERSATION_MODE)
 
 
 class BuiltInModeRegistry:

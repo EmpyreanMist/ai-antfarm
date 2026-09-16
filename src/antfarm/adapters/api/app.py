@@ -54,7 +54,7 @@ from antfarm.facade import (
     StartRunCommand,
     StopRunCommand,
 )
-from antfarm.population import RuntimeOverrides, WebAgentDraft
+from antfarm.population import ConversationSettings, RuntimeOverrides, WebAgentDraft
 from antfarm.ports.generation import CustomDefinitionGenerator
 from antfarm.ports.models import ModelInventory
 from antfarm.preflight import preflight_ollama
@@ -83,6 +83,13 @@ class AgentDraftRequest(ApiModel):
     cognition_interval: Annotated[int | None, Field(ge=1)] = None
 
 
+class ConversationRequest(ApiModel):
+    topic: Annotated[str, Field(min_length=1, max_length=2_000)]
+    situation: Annotated[str, Field(min_length=1, max_length=4_000)]
+    turns: Annotated[int, Field(ge=1, le=100)] = 12
+    memory_limit: Annotated[int, Field(ge=1, le=100)] = 20
+
+
 class ResolveRequest(ApiModel):
     seed: int | None = None
     run_id: str | None = None
@@ -92,6 +99,7 @@ class ResolveRequest(ApiModel):
     profiles: dict[str, dict[str, object]] = Field(default_factory=dict)
     model_assignments: dict[str, str] = Field(default_factory=dict)
     agents: list[AgentDraftRequest] | None = None
+    conversation: ConversationRequest | None = None
 
 
 class GeneratePopulationRequest(ApiModel):
@@ -155,9 +163,7 @@ def create_app(
     history_path = history_database or os.environ.get("ANTFARM_HISTORY_DB")
     history_storage = SQLiteStorage(history_path) if history_path else None
     inventory = model_inventory or OllamaModelPreflight(
-        base_url=os.environ.get(
-            "ANTFARM_OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1"
-        ),
+        base_url=os.environ.get("ANTFARM_OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1"),
         timeout_seconds=2,
     )
     application = AntFarmApplication(
@@ -309,6 +315,16 @@ def create_app(
                     if request.agents is not None
                     else None
                 ),
+                conversation=(
+                    ConversationSettings(
+                        topic=request.conversation.topic,
+                        situation=request.conversation.situation,
+                        turns=request.conversation.turns,
+                        memory_limit=request.conversation.memory_limit,
+                    )
+                    if request.conversation is not None
+                    else None
+                ),
             ),
         )
         resolution_id = uuid4().hex
@@ -453,9 +469,7 @@ def create_app(
 
     @app.post(f"{API_PREFIX}/runs/{{run_id}}/stop")
     async def stop_run(run_id: str) -> dict[str, object]:
-        return _run_state_view(
-            await runtime.application.stop(StopRunCommand(run_id))
-        )
+        return _run_state_view(await runtime.application.stop(StopRunCommand(run_id)))
 
     @app.get(f"{API_PREFIX}/runs/{{run_id}}")
     async def inspect_run(run_id: str) -> dict[str, object]:

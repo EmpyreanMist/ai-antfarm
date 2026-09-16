@@ -274,6 +274,32 @@ def test_local_models_and_web_agent_builder_resolve_without_yaml() -> None:
     )
 
 
+def test_conversation_mode_resolves_editable_context_and_turns() -> None:
+    for client in _client():
+        modes = client.get("/api/v1/modes").json()["items"]
+        conversation_mode = next(item for item in modes if item["id"] == "conversation")
+        assert conversation_mode["templates"][0]["id"] == "conversation-ollama"
+
+        response = client.post(
+            "/api/v1/scenarios/conversation-ollama/resolve",
+            json={
+                "conversation": {
+                    "topic": "Can rivals cooperate?",
+                    "situation": "Both sides need a deal before sunrise.",
+                    "turns": 7,
+                    "memory_limit": 6,
+                }
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["ticks"] == 7
+        assert body["runtime_overrides"]["conversation"]["topic"] == (
+            "Can rivals cooperate?"
+        )
+
+
 def test_local_model_discovery_reports_unavailable_without_leaking_errors() -> None:
     class UnavailableInventory:
         runtime = "ollama"

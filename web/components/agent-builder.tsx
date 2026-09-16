@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   discoverLocalModels,
@@ -28,6 +28,7 @@ type Props = {
   configuredModels: string[];
   initialCount: number;
   seed: number;
+  autoRandomize?: boolean;
   onChange: (agents: AgentDraft[]) => void;
   onError: (message: string) => void;
 };
@@ -38,6 +39,7 @@ export function AgentBuilder({
   configuredModels,
   initialCount,
   seed,
+  autoRandomize = false,
   onChange,
   onError,
 }: Props) {
@@ -47,10 +49,18 @@ export function AgentBuilder({
   const [authoring, setAuthoring] = useState<"manual" | "random" | "mixed">("manual");
   const [sharedModel, setSharedModel] = useState("");
   const [busy, setBusy] = useState(false);
+  const loadSeed = useRef(seed).current;
 
   useEffect(() => {
     let active = true;
-    getAgentDrafts(scenarioId)
+    const draftsRequest = autoRandomize && configuredModels[0]
+      ? generateAgentDrafts(scenarioId, {
+          count: initialCount,
+          seed: loadSeed,
+          model: configuredModels[0],
+        })
+      : getAgentDrafts(scenarioId);
+    draftsRequest
       .then((drafts) => {
         if (!active) return;
         const selected = drafts.slice(0, initialCount).map((draft) => ({
@@ -73,7 +83,7 @@ export function AgentBuilder({
       })
       .catch((error: unknown) => onError(message(error)));
     return () => { active = false; };
-  }, [configuredModels, initialCount, onChange, onError, runtime, scenarioId]);
+  }, [autoRandomize, configuredModels, initialCount, loadSeed, onChange, onError, runtime, scenarioId]);
 
   function commit(next: AgentDraft[]) {
     setAgents(next);
@@ -270,7 +280,7 @@ function AgentEditor({ agent, index, models, modelEnabled, busy, onUpdate, onRan
       <ListField label="Reputation labels" value={arrayAt(agent.profile, ["reputation", "labels"])} onChange={(value) => set(["reputation", "labels"], value)} />
       <RelationshipField value={objectAt(agent.profile, ["relationships"])} onChange={(value) => set(["relationships"], value)} />
       <details className="wide visibility-editor"><summary>Public / private visibility</summary><div>{VISIBILITY.map((field) => <label key={field}>{field.replaceAll("_", " ")}<select value={text(["visibility", field]) || "private"} onChange={(event) => set(["visibility", field], event.target.value)}><option value="private">Private</option><option value="public">Public</option></select></label>)}</div></details>
-      <ListField label="Private information" value={arrayAt(agent.profile, ["private_information"])} onChange={(value) => set(["private_information"], value)} />
+      <ListField label="Secret motives / private information" value={arrayAt(agent.profile, ["private_information"])} onChange={(value) => set(["private_information"], value)} />
     </div>
     <div className="agent-actions"><button type="button" disabled={busy} onClick={onRandomize}>Randomize</button><button type="button" onClick={onClone}>Clone</button><button type="button" onClick={onReset}>Reset</button><button type="button" onClick={onRemove}>Remove</button></div>
   </details>;
