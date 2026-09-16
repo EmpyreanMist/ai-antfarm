@@ -27,7 +27,9 @@ class SQLiteStorage:
     """Persist one run writer while allowing data to survive process restarts."""
 
     def __init__(self, path: str | Path) -> None:
-        self._connection = sqlite3.connect(Path(path))
+        # FastAPI may create the adapter before handing lifecycle ownership to
+        # its event-loop thread. Storage remains single-writer and serialized.
+        self._connection = sqlite3.connect(Path(path), check_same_thread=False)
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._connection.executescript(
             """
@@ -185,6 +187,26 @@ class SQLiteStorage:
                 runtime_overrides=_decode_object(cast(str, row[2])),
             ),
             scenario=_decode_object(cast(str, row[1])),
+        )
+
+    def list_runs(self, *, offset: int = 0, limit: int = 100) -> tuple[StoredRun, ...]:
+        rows = self._connection.execute(
+            """
+            SELECT run_id, seed, scenario_json, runtime_overrides_json
+            FROM runs ORDER BY rowid DESC LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        ).fetchall()
+        return tuple(
+            StoredRun(
+                metadata=RunMetadata(
+                    run_id=RunId(cast(str, row[0])),
+                    seed=cast(int, row[1]),
+                    runtime_overrides=_decode_object(cast(str, row[3])),
+                ),
+                scenario=_decode_object(cast(str, row[2])),
+            )
+            for row in rows
         )
 
     def read_events(

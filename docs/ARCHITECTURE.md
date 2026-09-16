@@ -105,6 +105,15 @@ or run command. The web client inserts it into the M8 editor, preserving explici
 human review, validation, preview, and start boundaries. Raw model output and
 prompts are not logged or returned in errors.
 
+Replay is a read-only application projection over stored run metadata, ordered
+events, and the latest checkpoint. A pure environment factory reconstructs the
+initial world without composing agents or model providers. The replay service
+verifies schema version, contiguous event/tick boundaries, validated-action
+causation and result payloads, then compares reconstructed final world state and
+event sequence with the checkpoint. Transport clients receive bounded immutable
+frames and comparison deltas, never storage records. This is action replay, not
+full event sourcing or resumable process ownership.
+
 ## Simulation Lifecycle
 
 ```text

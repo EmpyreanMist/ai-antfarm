@@ -383,54 +383,7 @@ def compose(
     event_bus = InMemoryEventBus(
         max_retained_events=config.observability.event_buffer_limit
     )
-    environment: Environment
-    if isinstance(config.environment, CommonsEnvironmentConfig):
-        active_agent_ids = set(agents)
-        profile_configs = {
-            AgentId(agent.id): config.profiles[agent.profile_ref]
-            for agent in resolved_agents
-            if agent.profile_ref is not None
-        }
-        environment = CommonsEnvironment(
-            initial_resource=config.environment.initial_resource,
-            initial_endowment=config.environment.initial_endowment,
-            agent_ids=agents,
-            initial_holdings={
-                AgentId(agent_id): amount
-                for agent_id, amount in config.environment.initial_holdings.items()
-                if AgentId(agent_id) in active_agent_ids
-            },
-            public_profiles={
-                agent_id: public_profile
-                for agent_id, profile_config in profile_configs.items()
-                if (public_profile := _public_profile(profile_config)) is not None
-            },
-            visibility={
-                agent_id: _information_visibility(profile_config)
-                for agent_id, profile_config in profile_configs.items()
-            },
-            social=config.environment.social is not None,
-            message_max_length=(
-                config.environment.social.message_max_length
-                if config.environment.social is not None
-                else 500
-            ),
-            history_limit=(
-                config.environment.social.history_limit
-                if config.environment.social is not None
-                else 20
-            ),
-            roster_limit=(
-                config.environment.social.roster_limit
-                if config.environment.social is not None
-                else 100
-            ),
-        )
-    else:
-        environment = CounterEnvironment(
-            initial_value=config.environment.initial_value,
-            agent_ids=agents,
-        )
+    environment = build_environment(config)
     engine = SimulationEngine(
         run_id=run_id,
         seed=config.run.seed,
@@ -472,4 +425,57 @@ def compose(
         event_bus=event_bus,
         metrics=engine.metrics,
         providers=tuple(dict.fromkeys(models.values())),
+    )
+
+
+def build_environment(config: ScenarioConfig) -> Environment:
+    """Build only the authoritative world for model-free replay."""
+
+    resolved_agents = config.active_agents()
+    agent_ids = tuple(AgentId(agent.id) for agent in resolved_agents)
+    if isinstance(config.environment, CommonsEnvironmentConfig):
+        active_agent_ids = set(agent_ids)
+        profile_configs = {
+            AgentId(agent.id): config.profiles[agent.profile_ref]
+            for agent in resolved_agents
+            if agent.profile_ref is not None
+        }
+        return CommonsEnvironment(
+            initial_resource=config.environment.initial_resource,
+            initial_endowment=config.environment.initial_endowment,
+            agent_ids=agent_ids,
+            initial_holdings={
+                AgentId(agent_id): amount
+                for agent_id, amount in config.environment.initial_holdings.items()
+                if AgentId(agent_id) in active_agent_ids
+            },
+            public_profiles={
+                agent_id: public_profile
+                for agent_id, profile_config in profile_configs.items()
+                if (public_profile := _public_profile(profile_config)) is not None
+            },
+            visibility={
+                agent_id: _information_visibility(profile_config)
+                for agent_id, profile_config in profile_configs.items()
+            },
+            social=config.environment.social is not None,
+            message_max_length=(
+                config.environment.social.message_max_length
+                if config.environment.social is not None
+                else 500
+            ),
+            history_limit=(
+                config.environment.social.history_limit
+                if config.environment.social is not None
+                else 20
+            ),
+            roster_limit=(
+                config.environment.social.roster_limit
+                if config.environment.social is not None
+                else 100
+            ),
+        )
+    return CounterEnvironment(
+        initial_value=config.environment.initial_value,
+        agent_ids=agent_ids,
     )

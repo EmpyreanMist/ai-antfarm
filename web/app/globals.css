@@ -10,6 +10,16 @@
   --blue: #70b7ff;
 }
 
+.history-workspace { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+.history-grid { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(0, 1.2fr); gap: 1rem; }
+.history-list { list-style: none; padding: 0; display: grid; gap: .6rem; }
+.history-run { width: 100%; text-align: left; display: grid; gap: .25rem; }
+.history-run span { color: var(--muted); font-size: .85rem; }
+.replay-panel input[type="range"] { width: 100%; }
+.comparison-panel { margin-top: 1rem; }
+.comparison-panel select { margin-right: .75rem; }
+@media (max-width: 760px) { .history-grid { grid-template-columns: 1fr; } }
+
 * { box-sizing: border-box; }
 html { background: #0b0d0b; }
 body {

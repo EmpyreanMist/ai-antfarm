@@ -180,3 +180,14 @@ def test_event_query_filters_and_limits_are_applied_in_sqlite(
         )
 
     assert selected == events[2:]
+
+
+def test_sqlite_lists_runs_in_reverse_creation_order(tmp_path: Path) -> None:
+    database = tmp_path / "history.db"
+    with SQLiteStorage(database) as storage:
+        storage.create_run(RunMetadata(run_id=RunId("first"), seed=1), {})
+        storage.create_run(RunMetadata(run_id=RunId("second"), seed=2), {})
+
+        page = storage.list_runs(limit=1)
+
+    assert [str(run.metadata.run_id) for run in page] == ["second"]

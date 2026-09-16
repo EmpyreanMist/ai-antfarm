@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
@@ -6,6 +7,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from antfarm.adapters.api import create_app
+from antfarm.custom import CustomSimulationDefinition, load_custom_definition
+from antfarm.custom.runtime import compose_custom
+from antfarm.domain import RunLimit
 
 EXAMPLES = Path("scenarios/examples")
 
@@ -231,3 +235,62 @@ def test_generation_returns_an_editable_proposal_without_starting_a_run() -> Non
         assert generated.json()["definition"]["kind"] == "custom"
         assert generated.json()["provenance"]["kind"] == "generated_proposal"
         assert "resolution_id" not in generated.json()
+
+
+def test_completed_runs_can_be_listed_replayed_and_compared() -> None:
+    for client in _client():
+        for run_id, seed in (("history-a", 41), ("history-b", 42)):
+            preview = _resolve(client, run_id=run_id, seed=seed)
+            started = client.post(
+                "/api/v1/runs",
+                json={"resolution_id": preview["resolution_id"]},
+            )
+            assert started.status_code == 201
+            assert _wait_for_terminal(client, run_id)["status"] == "completed"
+
+        history = client.get("/api/v1/runs?limit=1")
+        assert history.status_code == 200
+        assert len(history.json()["items"]) == 1
+        assert history.json()["next_offset"] == 1
+
+        replay = client.get("/api/v1/runs/history-a/replay?limit=1")
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["final_state_verified"] is True
+        assert replay.json()["items"][0]["tick"] == 1
+        assert replay.json()["next_offset"] == 1
+
+        comparison = client.get(
+            "/api/v1/runs/compare?baseline=history-a&candidate=history-b"
+        )
+        assert comparison.status_code == 200, comparison.text
+        assert comparison.json()["compatible"] is True
+        assert comparison.json()["baseline_run_id"] == "history-a"
+
+
+def test_api_discovers_and_replays_configured_sqlite_history(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "durable-history.db"
+    raw = load_custom_definition(
+        EXAMPLES / "custom-warehouse.yaml"
+    ).model_dump(mode="json")
+    raw["run"]["id"] = "durable-custom"
+    raw["storage"] = {"kind": "sqlite", "path": str(database)}
+    definition = CustomSimulationDefinition.model_validate(raw)
+
+    async def create_history() -> None:
+        simulation = compose_custom(definition)
+        await simulation.engine.run(RunLimit(definition.run.ticks))
+        await simulation.close()
+
+    asyncio.run(create_history())
+    with TestClient(
+        create_app(scenario_directory=EXAMPLES, history_database=database)
+    ) as client:
+        history = client.get("/api/v1/runs")
+        replay = client.get("/api/v1/runs/durable-custom/replay")
+
+    assert history.status_code == 200
+    assert history.json()["items"][0]["run_id"] == "durable-custom"
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["final_state_verified"] is True

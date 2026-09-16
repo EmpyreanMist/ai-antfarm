@@ -31,6 +31,10 @@ class Storage(Protocol):
 
     def read_run(self, run_id: RunId) -> StoredRun | None: ...
 
+    def list_runs(
+        self, *, offset: int = 0, limit: int = 100
+    ) -> Sequence[StoredRun]: ...
+
     def read_events(
         self,
         run_id: RunId,

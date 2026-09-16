@@ -119,6 +119,94 @@ class SnapshotView:
 
 
 @dataclass(frozen=True, slots=True)
+class RunHistoryQuery:
+    offset: int = 0
+    limit: int = DEFAULT_PAGE_SIZE
+
+    def __post_init__(self) -> None:
+        if self.offset < 0:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT, "offset must not be negative"
+            )
+        _validate_page_size(self.limit)
+
+
+@dataclass(frozen=True, slots=True)
+class RunHistoryItem:
+    run_id: str
+    seed: int
+    kind: str
+    status: RunStatus
+    tick: int
+
+
+@dataclass(frozen=True, slots=True)
+class RunHistoryPage:
+    items: Sequence[RunHistoryItem]
+    next_offset: int | None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "items", tuple(self.items))
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayQuery:
+    run_id: str
+    offset: int = 0
+    limit: int = DEFAULT_PAGE_SIZE
+
+    def __post_init__(self) -> None:
+        if not self.run_id:
+            raise ApplicationError(ErrorCode.INVALID_ARGUMENT, "run_id is required")
+        if self.offset < 0:
+            raise ApplicationError(
+                ErrorCode.INVALID_ARGUMENT, "offset must not be negative"
+            )
+        _validate_page_size(self.limit)
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayFrame:
+    tick: int
+    event_sequence: int
+    world: JsonObject
+    metrics: JsonObject
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "world", freeze_object(self.world))
+        object.__setattr__(self, "metrics", freeze_object(self.metrics))
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayPage:
+    run_id: str
+    items: Sequence[ReplayFrame]
+    next_offset: int | None
+    final_state_verified: bool
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "items", tuple(self.items))
+
+
+@dataclass(frozen=True, slots=True)
+class RunComparisonView:
+    baseline_run_id: str
+    candidate_run_id: str
+    compatible: bool
+    incompatible_fields: tuple[str, ...]
+    tick_delta: int
+    metric_deltas: JsonObject
+    state_deltas: JsonObject
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "incompatible_fields", tuple(self.incompatible_fields)
+        )
+        object.__setattr__(self, "metric_deltas", freeze_object(self.metric_deltas))
+        object.__setattr__(self, "state_deltas", freeze_object(self.state_deltas))
+
+
+@dataclass(frozen=True, slots=True)
 class EventView:
     schema_version: int
     event_id: str

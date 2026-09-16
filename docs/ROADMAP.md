@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This is the active plan from the completed M0-M9 baseline onward. The detailed
+This is the active plan from the completed M0-M10 baseline onward. The detailed
 M0-M2 implementation history is preserved unchanged in
 [`ROADMAP_old.md`](ROADMAP_old.md). Completed work is summarized here only where
 it establishes a dependency or constraint for future work.
@@ -445,6 +445,15 @@ plugins, prompt-history accounts, model training, or replacing structured editin
 
 ## M10: Visualization, Replay, and Experiment Analysis
 
+**Status: Complete.** Recorded committed actions are reconstructed through the
+original environment validation/mutation rules with a seeded random source and
+no cognition/provider dependency. Ordered histories and final checkpoints are
+verified before bounded replay frames are returned. The application/API expose
+run history, replay, generic metrics, state/metric deltas, and explicit
+compatibility results; the web control plane provides timeline and comparison
+views for Society and custom runs. Configured SQLite history supports discovery
+after restart.
+
 **Outcome:** completed runs can be replayed without model calls, compared through
 stable application contracts, and explored through useful web timelines and
 state/metric views.
@@ -485,6 +494,11 @@ their requirements are demonstrated.
 chart-plugin system, full event sourcing, or replay that calls an LLM.
 
 ## M11: Optional Advanced Simulation Systems
+
+**Status: Optional future capability track.** The general platform and its core
+authoring, execution, inspection, generation, replay, and comparison workflows
+are complete through M10. M11 is intentionally demand-driven rather than a
+required completion gate.
 
 Advance relationships, reputation, groups, institutions, occupations, markets,
 governance, survival systems, and richer environments as optional reusable

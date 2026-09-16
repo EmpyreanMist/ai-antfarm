@@ -135,8 +135,9 @@ Mode architecture and serves Society through transport-neutral discovery without
 prematurely designing every possible mode. M7 implements the generic custom
 simulation definition and M8 exposes it through a structured browser builder. The
 M9 adds AI-assisted proposal generation that always returns to the editable,
-validated definition workflow before execution. The next product target is
-model-free replay, run comparison, and richer result exploration.
+validated definition workflow before execution. M10 completes the core product
+loop with model-free replay, run comparison, and richer result exploration.
+Further advanced social/economic systems are optional, demand-driven capabilities.
 
 ## Long-Term Direction
 

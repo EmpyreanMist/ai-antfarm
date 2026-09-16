@@ -35,6 +35,24 @@ test("previews, runs, inspects, and safely stops the mock Society", async ({
   await page.getByRole("button", { name: "Stop safely" }).click();
   await expect(page.getByText("stopped", { exact: true })).toBeVisible();
   await expect(page.locator(".state-panel pre")).toContainText('"resource"');
+
+  await page.getByRole("button", { name: "History & replay" }).click();
+  const completedRun = page.locator(".history-run", { hasText: "completed" });
+  await completedRun.click();
+  await expect(page.getByText(/Replay verified for/)).toBeVisible();
+  await expect(page.getByLabel(/Tick .* event/)).toBeVisible();
+  const baseline = await completedRun.locator("strong").innerText();
+  const candidate = await page
+    .getByLabel("Candidate run")
+    .locator("option")
+    .evaluateAll((options, selected) =>
+      options.map((option) => (option as HTMLOptionElement).value).find(
+        (value) => value && value !== selected,
+      ), baseline);
+  if (!candidate) throw new Error("Expected a second run for comparison");
+  await page.getByLabel("Candidate run").selectOption(candidate);
+  await page.getByRole("button", { name: "Compare outcomes" }).click();
+  await expect(page.getByText("Comparison ready")).toBeVisible();
 });
 
 test("edits, validates, previews, and runs a custom definition", async ({ page }) => {

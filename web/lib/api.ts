@@ -122,6 +122,38 @@ export type GeneratedCustom = {
   };
 };
 
+export type RunHistoryItem = {
+  run_id: string;
+  seed: number;
+  kind: string;
+  status: RunState["status"];
+  tick: number;
+};
+
+export type ReplayFrame = {
+  tick: number;
+  event_sequence: number;
+  world: Record<string, JsonValue>;
+  metrics: Record<string, JsonValue>;
+};
+
+export type ReplayPage = {
+  run_id: string;
+  items: ReplayFrame[];
+  next_offset: number | null;
+  final_state_verified: boolean;
+};
+
+export type RunComparison = {
+  baseline_run_id: string;
+  candidate_run_id: string;
+  compatible: boolean;
+  incompatible_fields: string[];
+  tick_delta: number;
+  metric_deltas: Record<string, JsonValue>;
+  state_deltas: Record<string, JsonValue>;
+};
+
 export type ResolveInput = {
   seed?: number;
   run_id?: string;
@@ -240,6 +272,23 @@ export function eventStreamUrl(runId: string, after: number): string {
     ].join(","),
   );
   return url.toString();
+}
+
+export async function listRuns(): Promise<RunHistoryItem[]> {
+  const response = await request<{ items: RunHistoryItem[] }>("/runs?limit=100");
+  return response.items;
+}
+
+export function replayRun(runId: string): Promise<ReplayPage> {
+  return request(`/runs/${encodeURIComponent(runId)}/replay?limit=1000`);
+}
+
+export function compareRuns(
+  baseline: string,
+  candidate: string,
+): Promise<RunComparison> {
+  const query = new URLSearchParams({ baseline, candidate });
+  return request(`/runs/compare?${query.toString()}`);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

@@ -53,6 +53,14 @@ class InMemoryStorage:
             return None
         return StoredRun(metadata=metadata, scenario=freeze_object(scenario))
 
+    def list_runs(self, *, offset: int = 0, limit: int = 100) -> tuple[StoredRun, ...]:
+        run_ids = sorted(self.metadata, key=str)
+        return tuple(
+            run
+            for run_id in run_ids[offset : offset + limit]
+            if (run := self.read_run(run_id)) is not None
+        )
+
     def read_events(
         self,
         run_id: RunId,

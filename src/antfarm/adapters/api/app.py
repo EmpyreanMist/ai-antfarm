@@ -24,6 +24,7 @@ from antfarm.adapters.generation import (
     OpenAICompatibleDefinitionGenerator,
     StaticCustomDefinitionGenerator,
 )
+from antfarm.adapters.storage import SQLiteStorage
 from antfarm.adapters.terminal import VISIBLE_EVENT_KINDS
 from antfarm.application.contracts import (
     AgentQuery,
@@ -33,6 +34,8 @@ from antfarm.application.contracts import (
     EventQuery,
     EventView,
     ModeView,
+    ReplayQuery,
+    RunHistoryQuery,
     RunMode,
     RunState,
     RunStatus,
@@ -110,6 +113,7 @@ class ApiRuntime:
     resolutions: dict[str, ResolvedRunConfiguration | ResolvedCustomDefinition]
     custom_starter: CustomSimulationDefinition
     run_ids: set[str]
+    history_storage: SQLiteStorage | None
 
 
 def create_app(
@@ -121,6 +125,7 @@ def create_app(
     ),
     stream_buffer_size: int = DEFAULT_STREAM_BUFFER,
     custom_definition_generator: CustomDefinitionGenerator | None = None,
+    history_database: str | Path | None = None,
 ) -> FastAPI:
     """Create the local M5 control-plane API."""
 
@@ -129,13 +134,18 @@ def create_app(
     scenario_root = Path(scenario_directory)
     custom_starter = load_custom_definition(scenario_root / "custom-warehouse.yaml")
     generator = custom_definition_generator or _configured_generator(custom_starter)
-    application = AntFarmApplication(custom_definition_generator=generator)
+    history_path = history_database or os.environ.get("ANTFARM_HISTORY_DB")
+    history_storage = SQLiteStorage(history_path) if history_path else None
+    application = AntFarmApplication(
+        storage=history_storage, custom_definition_generator=generator
+    )
     runtime = ApiRuntime(
         application=application,
         catalog=ScenarioCatalog(scenario_root, application),
         resolutions={},
         custom_starter=custom_starter,
         run_ids=set(),
+        history_storage=history_storage,
     )
 
     @asynccontextmanager
@@ -143,6 +153,8 @@ def create_app(
         yield
         await _stop_active_runs(runtime)
         await runtime.application.close()
+        if runtime.history_storage is not None:
+            runtime.history_storage.close()
 
     app = FastAPI(
         title="AntFarm Control API",
@@ -300,6 +312,65 @@ def create_app(
         runtime.resolutions.pop(request.resolution_id)
         runtime.run_ids.add(state.run_id)
         return _run_state_view(state)
+
+    @app.get(f"{API_PREFIX}/runs")
+    async def list_runs(
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=1_000)] = 100,
+    ) -> dict[str, object]:
+        page = runtime.application.query_run_history(
+            RunHistoryQuery(offset=offset, limit=limit)
+        )
+        return {
+            "items": [
+                {
+                    "run_id": item.run_id,
+                    "seed": item.seed,
+                    "kind": item.kind,
+                    "status": item.status.value,
+                    "tick": item.tick,
+                }
+                for item in page.items
+            ],
+            "next_offset": page.next_offset,
+        }
+
+    @app.get(f"{API_PREFIX}/runs/compare")
+    async def compare_runs(baseline: str, candidate: str) -> dict[str, object]:
+        comparison = runtime.application.compare_runs(baseline, candidate)
+        return {
+            "baseline_run_id": comparison.baseline_run_id,
+            "candidate_run_id": comparison.candidate_run_id,
+            "compatible": comparison.compatible,
+            "incompatible_fields": list(comparison.incompatible_fields),
+            "tick_delta": comparison.tick_delta,
+            "metric_deltas": thaw_json(comparison.metric_deltas),
+            "state_deltas": thaw_json(comparison.state_deltas),
+        }
+
+    @app.get(f"{API_PREFIX}/runs/{{run_id}}/replay")
+    async def replay_run(
+        run_id: str,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=1_000)] = 100,
+    ) -> dict[str, object]:
+        page = runtime.application.query_replay(
+            ReplayQuery(run_id=run_id, offset=offset, limit=limit)
+        )
+        return {
+            "run_id": page.run_id,
+            "items": [
+                {
+                    "tick": item.tick,
+                    "event_sequence": item.event_sequence,
+                    "world": thaw_json(item.world),
+                    "metrics": thaw_json(item.metrics),
+                }
+                for item in page.items
+            ],
+            "next_offset": page.next_offset,
+            "final_state_verified": page.final_state_verified,
+        }
 
     @app.get(f"{API_PREFIX}/runs/{{run_id}}/state")
     async def run_state(run_id: str) -> dict[str, object]:

@@ -22,6 +22,12 @@ from antfarm.application.contracts import (
     EventQuery,
     EventView,
     ModeView,
+    ReplayPage,
+    ReplayQuery,
+    RunComparisonView,
+    RunHistoryItem,
+    RunHistoryPage,
+    RunHistoryQuery,
     RunMode,
     RunState,
     RunStatus,
@@ -29,7 +35,8 @@ from antfarm.application.contracts import (
     SnapshotView,
 )
 from antfarm.application.modes import BuiltInModeRegistry
-from antfarm.composition import ComposedSimulation, compose
+from antfarm.application.replay import ReplayResult, json_deltas, replay_events
+from antfarm.composition import ComposedSimulation, build_environment, compose
 from antfarm.config import load_scenario
 from antfarm.config.schema import ScenarioConfig, SqliteStorageConfig, StorageConfig
 from antfarm.custom.generation import (
@@ -37,7 +44,7 @@ from antfarm.custom.generation import (
     GenerateCustomDefinitionCommand,
     GeneratedCustomDefinition,
 )
-from antfarm.custom.runtime import compose_custom
+from antfarm.custom.runtime import DeclarativeEnvironment, compose_custom
 from antfarm.custom.schema import (
     CustomRunConfig,
     CustomSimulationDefinition,
@@ -53,6 +60,7 @@ from antfarm.domain.models import (
     StoredRun,
     Tick,
 )
+from antfarm.domain.protocols import Environment
 from antfarm.population import (
     RuntimeOverrides,
     resolve_run_config,
@@ -465,6 +473,59 @@ class AntFarmApplication:
             metrics=snapshot.metrics,
         )
 
+    def query_run_history(self, query: RunHistoryQuery) -> RunHistoryPage:
+        stored: dict[str, StoredRun] = {}
+        for run_id in self._runs:
+            run = self.read_run(run_id)
+            if run is not None:
+                stored[str(run_id)] = run
+        if self._query_storage is not None:
+            for run in self._query_storage.list_runs(
+                offset=0, limit=query.offset + query.limit + 1
+            ):
+                stored.setdefault(str(run.metadata.run_id), run)
+        ordered = sorted(stored.values(), key=lambda run: str(run.metadata.run_id))
+        selected = ordered[query.offset : query.offset + query.limit + 1]
+        has_more = len(selected) > query.limit
+        items = tuple(self._history_item(run) for run in selected[: query.limit])
+        return RunHistoryPage(
+            items=items,
+            next_offset=(query.offset + query.limit if has_more else None),
+        )
+
+    def query_replay(self, query: ReplayQuery) -> ReplayPage:
+        result = self._replay(query.run_id)
+        end = query.offset + query.limit
+        items = result.frames[query.offset:end]
+        return ReplayPage(
+            run_id=query.run_id,
+            items=items,
+            next_offset=end if end < len(result.frames) else None,
+            final_state_verified=True,
+        )
+
+    def compare_runs(
+        self, baseline_run_id: str, candidate_run_id: str
+    ) -> RunComparisonView:
+        baseline_run = self.query_run(baseline_run_id)
+        candidate_run = self.query_run(candidate_run_id)
+        incompatible = _compatibility_differences(
+            baseline_run.scenario, candidate_run.scenario
+        )
+        baseline = self._replay(baseline_run_id)
+        candidate = self._replay(candidate_run_id)
+        return RunComparisonView(
+            baseline_run_id=baseline_run_id,
+            candidate_run_id=candidate_run_id,
+            compatible=not incompatible,
+            incompatible_fields=tuple(incompatible),
+            tick_delta=len(candidate.frames) - len(baseline.frames),
+            metric_deltas=json_deltas(
+                baseline.final_metrics, candidate.final_metrics
+            ),
+            state_deltas=json_deltas(baseline.final_world, candidate.final_world),
+        )
+
     def query_events(self, query: EventQuery) -> EventPage:
         self.query_run(query.run_id)
         events = self._read_filtered_events(query, limit=query.limit + 1)
@@ -489,6 +550,69 @@ class AntFarmApplication:
             )
         return handle.simulation.event_bus.subscribe(
             kinds, lambda event: handler(event_view(event))
+        )
+
+    def _replay(self, run_id: RunId | str) -> ReplayResult:
+        stored = self.read_run(run_id)
+        checkpoint = self.read_snapshot(run_id)
+        if stored is None or checkpoint is None:
+            raise ApplicationError(
+                ErrorCode.NOT_FOUND,
+                f"completed run data was not found: {run_id}",
+            )
+        raw = thaw_json(stored.scenario)
+        if not isinstance(raw, dict):
+            raise ApplicationError(
+                ErrorCode.INVALID_STATE, "stored scenario is invalid"
+            )
+        raw.pop("active_agent_ids", None)
+        raw.pop("expanded_agents", None)
+        try:
+            environment: Environment
+            if raw.get("kind") == "custom":
+                environment = DeclarativeEnvironment(
+                    CustomSimulationDefinition.model_validate(raw)
+                )
+            else:
+                environment = build_environment(ScenarioConfig.model_validate(raw))
+            return replay_events(
+                environment=environment,
+                seed=stored.metadata.seed,
+                events=self.read_events(run_id),
+                checkpoint=checkpoint,
+            )
+        except ApplicationError:
+            raise
+        except (TypeError, ValueError) as error:
+            raise ApplicationError(
+                ErrorCode.INVALID_STATE,
+                "stored run is incompatible with replay",
+                details={"error_type": type(error).__name__},
+            ) from error
+
+    def _history_item(self, stored: StoredRun) -> RunHistoryItem:
+        run_id = stored.metadata.run_id
+        handle = self._runs.get(run_id)
+        checkpoint = self.read_snapshot(run_id)
+        tick = 0 if checkpoint is None else int(checkpoint.tick)
+        raw_kind = stored.scenario.get("kind")
+        kind = raw_kind if isinstance(raw_kind, str) else "society"
+        if handle is not None:
+            state = self.read_run_state(run_id)
+            status = state.status
+        else:
+            target = _scenario_ticks(stored.scenario)
+            status = (
+                RunStatus.COMPLETED
+                if target is not None and tick >= target
+                else RunStatus.STOPPED
+            )
+        return RunHistoryItem(
+            run_id=str(run_id),
+            seed=stored.metadata.seed,
+            kind=kind,
+            status=status,
+            tick=tick,
         )
 
     def read_run(self, run_id: RunId | str) -> StoredRun | None:
@@ -825,6 +949,57 @@ def _entity_as_agent(entity: ResolvedEntityInspection) -> ResolvedAgentInspectio
         model=behavior,
         configuration=entity.configuration,
         public=entity.public,
+    )
+
+
+def _scenario_ticks(scenario: Mapping[str, object]) -> int | None:
+    run = scenario.get("run")
+    if not isinstance(run, Mapping):
+        return None
+    ticks = run.get("ticks")
+    return ticks if isinstance(ticks, int) and not isinstance(ticks, bool) else None
+
+
+def _compatibility_differences(
+    baseline: Mapping[str, object], candidate: Mapping[str, object]
+) -> list[str]:
+    differences: list[str] = []
+    baseline_custom = baseline.get("kind") == "custom"
+    candidate_custom = candidate.get("kind") == "custom"
+    if baseline_custom != candidate_custom:
+        return ["kind"]
+    if baseline.get("schema_version") != candidate.get("schema_version"):
+        differences.append("schema_version")
+    if baseline_custom:
+        for field in ("world_fields", "entity_types", "actions"):
+            if baseline.get(field) != candidate.get(field):
+                differences.append(field)
+    else:
+        baseline_environment = baseline.get("environment")
+        candidate_environment = candidate.get("environment")
+        if _mapping_value(baseline_environment, "kind") != _mapping_value(
+            candidate_environment, "kind"
+        ):
+            differences.append("environment.kind")
+        if _action_kinds(baseline.get("actions")) != _action_kinds(
+            candidate.get("actions")
+        ):
+            differences.append("actions")
+    return differences
+
+
+def _mapping_value(value: object, key: str) -> object:
+    return value.get(key) if isinstance(value, Mapping) else None
+
+
+def _action_kinds(value: object) -> frozenset[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return frozenset()
+    return frozenset(
+        str(kind)
+        for item in value
+        if isinstance(item, Mapping)
+        and isinstance((kind := item.get("kind")), str)
     )
 
 

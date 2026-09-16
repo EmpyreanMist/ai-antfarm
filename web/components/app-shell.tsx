@@ -4,9 +4,10 @@ import { useState } from "react";
 
 import { ControlPlane } from "@/components/control-plane";
 import { CustomBuilder } from "@/components/custom-builder";
+import { HistoryExplorer } from "@/components/history-explorer";
 
 export function AppShell() {
-  const [workspace, setWorkspace] = useState<"modes" | "custom">("modes");
+  const [workspace, setWorkspace] = useState<"modes" | "custom" | "history">("modes");
 
   return (
     <>
@@ -25,8 +26,17 @@ export function AppShell() {
         >
           Custom builder
         </button>
+        <button
+          type="button"
+          aria-pressed={workspace === "history"}
+          onClick={() => setWorkspace("history")}
+        >
+          History & replay
+        </button>
       </nav>
-      {workspace === "modes" ? <ControlPlane /> : <CustomBuilder />}
+      {workspace === "modes" && <ControlPlane />}
+      {workspace === "custom" && <CustomBuilder />}
+      {workspace === "history" && <HistoryExplorer />}
     </>
   );
 }

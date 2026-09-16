@@ -42,7 +42,7 @@ The foundation currently includes:
 - A Next.js Society control plane for preview, live events, stop, and inspection
 - An offline example scenario with unit and end-to-end tests
 
-M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M9 are complete. See
+M0, M1-01/M1-02, M2-01 through M2-05, M3-01 through M3-04, and M4-M10 are complete. See
 [the roadmap](docs/ROADMAP.md) for current progress.
 
 ## Web Control Plane
@@ -85,10 +85,11 @@ documentation is at `http://127.0.0.1:8000/docs`. To point the browser at anothe
 API origin, copy `web/.env.example` to `web/.env.local` and change
 `NEXT_PUBLIC_ANTFARM_API_URL` before starting or building Next.js.
 
-The M5 server deliberately assumes one local trusted operator. Running tasks and
+The server deliberately assumes one local trusted operator. Running tasks and
 live subscriptions are process-local; restarting the API does not resume task
-ownership. SQLite scenarios retain their committed checkpoints and event audit,
-but cross-restart run discovery/resume and multi-process coordination remain
+ownership. SQLite scenarios retain committed checkpoints and event audits. Set
+`ANTFARM_HISTORY_DB` to one such database before starting the API to discover and
+replay its runs after restart; multi-process ownership and run resumption remain
 future work.
 
 The repeatable offline browser acceptance test starts both servers automatically
@@ -111,6 +112,21 @@ uv run antfarm serve --reload
 
 Generated output is never executed or started automatically. It must be reviewed
 in the structured editor and pass the normal server validation/preview step.
+
+After running two simulations, open **History & replay**. Select a run to scrub
+its verified tick timeline and inspect reconstructed world state and generic
+action/outcome metrics. Choose another run under **Compare runs** to inspect
+state and metric deltas. Replay re-applies only committed validated actions and
+checks the result against the final atomic checkpoint; it never calls an LLM.
+
+For durable history, run one of the SQLite examples and point the next API
+process at its database:
+
+```powershell
+uv run antfarm run scenarios/examples/live-social-mock.yaml
+$env:ANTFARM_HISTORY_DB = "live-social-mock.db"
+uv run antfarm serve --reload
+```
 
 ## Custom Simulations
 
