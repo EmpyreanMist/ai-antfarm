@@ -493,25 +493,263 @@ their requirements are demonstrated.
 **M10 non-goals:** branching timelines, distributed experiment workers, a generic
 chart-plugin system, full event sourcing, or replay that calls an LLM.
 
-## M11: Optional Advanced Simulation Systems
+## Product Direction After M10
 
-**Status: Optional future capability track.** The general platform and its core
-authoring, execution, inspection, generation, replay, and comparison workflows
-are complete through M10. M11 is intentionally demand-driven rather than a
-required completion gate.
+The browser is the primary interactive AntFarm product. Normal local use should
+not require editing YAML or invoking the CLI: users discover installed models,
+author populations, configure a mode, preview the exact resolved inputs, run,
+observe, stop, replay, and compare from the web UI. YAML, CLI, and Python remain
+supported power-user and developer surfaces over the same application contracts.
 
-Advance relationships, reputation, groups, institutions, occupations, markets,
-governance, survival systems, and richer environments as optional reusable
-capabilities and/or mode-owned functionality. Add one validated need at a time;
-none of these concepts becomes mandatory in the AntFarm object model, and no
-system may bypass environment/domain-owned validation and mutation.
+Future work preserves server-authoritative mutation, committed-event semantics,
+explicit seeds and provenance, private/public boundaries, and provider-neutral
+ports. Curated presets make experiments quick and entertaining without creating
+special-case engines. Each milestone below must leave an independently useful,
+manually testable browser experience.
+
+## M11: Web-First Models and Agent Builder
+
+**User-visible outcome:** a user can discover local Ollama models and construct,
+randomize, edit, and preview a complete Society-compatible population in the
+browser without typing a model tag or editing YAML.
+
+**Architecture boundary:** Ollama discovery remains behind a provider-neutral
+application port and backend API. One shared population/profile contract serves
+manual, seeded-random, and mixed authoring; generated agents are ordinary editable
+agents. Model assignment remains separate from identity.
+
+**Core capabilities:** Ollama availability and installed-model discovery; shared
+or per-agent model assignment; manual/random/mixed population authoring; seeded
+whole-population and single-agent regeneration; add, remove, clone, and reset;
+identity, personality, goals, beliefs, values, communication, behavioral traits,
+Society profile fields, visibility, and an exact public/private resolved preview.
+
+**Acceptance criteria:**
+
+- Show connected/unavailable and installed/missing model states from backend data.
+- Select one installed model for all agents and override selected agents without
+  creating one model process per agent.
+- Produce identical random populations for identical inputs and seed, using the
+  same validated profile schema as manual agents.
+- Support manual, random, and mixed populations up to the current safe limit while
+  keeping limits contractual rather than making ten an architectural maximum.
+- Persist the exact resolved population and model/runtime provenance with the run.
+- Cover discovery failures, generation/editing, visibility preview, validation,
+  and a browser create-preview-run journey offline where possible.
+
+**Non-goals:** downloading arbitrary models, model lifecycle management, remote
+provider marketplaces, unlimited populations, or model-generated private
+reasoning. Manual acceptance: select an installed Ollama model, randomize several
+agents, edit and clone one, inspect visibility, then run them from the browser.
+
+## M12: Conversation / Social Sandbox Mode
+
+**User-visible outcome:** users can start an autonomous multi-agent conversation
+in minutes by choosing models, agents, and a situation or curated preset.
+
+**Architecture boundary:** Conversation is a registered Game Mode over the shared
+engine, Agent Builder, memory, speech action, and event contracts—not a special
+chat loop. Public conversation becomes later bounded observation; secrets remain
+subject to configured visibility.
+
+**Core capabilities:** initial topic/situation, optional relationships and secret
+motives, memory/context limits, pacing, bounded/continuous execution, and presets
+such as open conversation, dinner party, heated debate, hostile negotiation,
+philosophical discussion, jury deliberation, stranded group, rival factions, and
+team planning.
+
+**Acceptance criteria:** presets resolve to editable configuration; agents react
+to prior committed public speech; the live view uses actor names and supports safe
+stop, history, replay, and comparison; distinct agents may share or override a
+model; offline deterministic tests cover ordering and visibility.
+
+**Non-goals:** private chain-of-thought, voice/video, unrestricted direct messages,
+or economy/governance systems. Manual acceptance: choose a preset, randomize the
+cast, run a bounded conversation, then replay and compare it with another seed.
+
+## M13: Society Economy, Ownership, and Trade
+
+**User-visible outcome:** Society experiments can model unequal wealth, scarcity,
+ownership, giving, exchange, buying, selling, prices, work, wages, income, and
+simple debt through inspectable authoritative state.
+
+**Architecture boundary:** reusable economic values and transitions are optional
+capabilities selected by Society scenarios. Models propose typed actions; the
+environment validates ownership, balances, inventory, prices, and context before
+committing effects.
+
+**Core capabilities:** money, inventories/resources, ownership, give, trade,
+buy/sell, prices, work/wages, optional recurring income, and bounded debts/loans;
+templates for unequal wealth, scarce resources, free market, and employer/worker
+negotiation.
+
+**Acceptance criteria:** value is conserved where rules require it; invalid or
+impossible transfers are rejected; public/private economic visibility is honored;
+state, events, metrics, replay, and comparison explain every accepted transition;
+at least two curated browser experiments require no YAML.
+
+**Non-goals:** companies, securities, macroeconomic realism, tax/government, or
+unvalidated natural-language balance changes.
+
+## M14: Jobs, Production, and Companies
+
+**User-visible outcome:** agents can found and operate simple companies, employ
+others, produce goods/services, set prices, and compete in browser-run experiments.
+
+**Architecture boundary:** companies are optional entities with authoritative
+cash, inventory, ownership, products, employees, and policies. Company actions
+reuse economic ownership/transfer contracts and never become LLM-owned state.
+
+**Core capabilities:** company creation, cash and inventory, ownership shares,
+products/services, hiring/firing, wages, work/production, and agent-company or
+company-company buying/selling.
+
+**Acceptance criteria:** employment and production obey configured constraints;
+company and worker outcomes are inspectable and replayable; a company-competition
+and an employer/worker template are independently playable in the browser.
+
+**Non-goals:** corporate law, accounting standards, stock markets, complex supply
+chains, or autonomous plugin code.
+
+## M15: Dynamic Relationships, Reputation, and Groups
+
+**User-visible outcome:** social behavior can build or damage trust, reputation,
+relationships, alliances, and group membership over time.
+
+**Architecture boundary:** relationship/reputation/group state is mode-selected,
+typed, visibility-aware, and environment-owned. Conversation and economic events
+may feed explicit configured update rules; models cannot assign scores directly.
+
+**Core capabilities:** helping, accusations, deception/fraud attempts where a
+scenario enables them, relationship changes, reputation evidence, alliances,
+groups/factions, and public/private membership.
+
+**Acceptance criteria:** updates cite committed causes, visibility is enforced,
+replay reproduces the social graph, and rival-factions plus betrayal/trust presets
+are usable from setup through comparison in the browser.
+
+**Non-goals:** universal morality scores, inferred protected attributes, opaque
+LLM-authored reputation changes, or requiring relationships in every mode.
+
+## M16: Governance, Laws, and Voting
+
+**User-visible outcome:** Society scenarios can stage councils, elections,
+proposals, voting, offices, configurable laws, and simple taxation.
+
+**Architecture boundary:** governance is an optional capability that produces
+versioned authoritative rules consumed by validation. Office holders and models
+may propose or vote, but cannot bypass enactment procedures or mutate law.
+
+**Core capabilities:** proposals, ballots, voting rules, elections, offices/roles,
+law lifecycle, rule-aware action validation, and optional taxes; templates for a
+small democracy, council vote, authoritarian leader, and constitutional rules.
+
+**Acceptance criteria:** every law and office transition is attributable and
+replayable; rejected actions explain applicable rules; results and current laws
+are visible in the live UI; at least two governance presets are browser-playable.
+
+**Non-goals:** a universal legal language, real-world jurisdiction simulation,
+campaign platforms, or mandatory governance for Society.
+
+## M17: Crime, Detection, and Justice
+
+**User-visible outcome:** configured scenarios can model stealing, detection,
+accusation, arrest, judgment, imprisonment, and release as constrained actions and
+state rather than narrative side effects.
+
+**Architecture boundary:** crime and justice compose economy, context, governance,
+and visibility capabilities. The environment decides feasibility, probabilistic
+outcome from the run seed, detection, evidence, and authoritative consequences.
+
+**Core capabilities:** theft and fraud attempts, detection/evidence, accusation,
+arrest, trial/vote/rule-based judgment, sentence duration, state restrictions,
+imprisonment, and release; presets for prison society and corruption experiments.
+
+**Acceptance criteria:** impossible actions cannot mutate state; detected and
+hidden outcomes expose only permitted events; restrictions are enforced by
+validation; seeded non-model outcomes replay exactly; a complete justice flow is
+observable in the browser.
+
+**Non-goals:** realistic legal advice, unrestricted violence, model-selected
+punishment outside scenario rules, or a mandatory justice system.
+
+## M18: Rich Live Simulation Views
+
+**User-visible outcome:** runs feel like living experiments rather than forms plus
+raw JSON, with mode-aware conversation, action, entity, economy, relationship,
+company, group, law, metric, timeline, replay, and comparison views.
+
+**Architecture boundary:** views consume bounded application projections and
+public committed state. Modes may declare relevant presentation hints; frontend
+components do not interpret persistence records or own simulation rules.
+
+**Core capabilities:** filterable live feeds with actor names, agent/entity cards,
+current public resources and status, mode-specific panels, metric series, clearer
+replay controls, comparison summaries, and responsive large-population handling.
+
+**Acceptance criteria:** each implemented mode has a useful default dashboard;
+private data and chain-of-thought never leak; large lists/series remain paginated
+or bounded; reconnect and terminal states remain correct; offline Playwright tests
+cover the primary live and analysis journeys.
+
+**Non-goals:** a game engine, universal chart-plugin framework, 3D world, hidden
+reasoning display, or frontend-owned derived truth.
+
+## M19: Advanced Custom Simulation Builder
+
+**User-visible outcome:** users can create and run model-backed custom simulations
+entirely through structured controls, including the full strict M7 definition,
+without YAML.
+
+**Architecture boundary:** the builder remains an editor for versioned data-only
+definitions. Server validation and environment-owned transitions stay canonical;
+AI generation only proposes editable data and never starts a run.
+
+**Core capabilities:** complete editors for entity types/entities, typed fields,
+ownership/visibility, actions/parameters/constraints/effects, activation,
+termination, deterministic and model-backed entities, installed-model assignment,
+storage/run settings, reusable templates, import/export, and migration feedback.
+
+**Acceptance criteria:** every supported M7 field is editable without raw JSON;
+model assignments use backend discovery; invalid references/transitions receive
+field-level feedback; generated proposals remain editable and require validation
+plus explicit start; round-trip import/export preserves normalized definitions;
+an offline browser journey builds a non-Society simulation from scratch.
+
+**Non-goals:** arbitrary Python, shell or browser code; agent-written plugins;
+automatic execution; collaborative editing; or bypassing schema/environment
+validation.
+
+## M20: Survival and Resource Experiments
+
+**User-visible outcome:** users can run tense, reproducible survival experiments
+about scarcity, disaster, depletion, cooperation, and selfishness from curated
+browser templates.
+
+**Architecture boundary:** survival is a mode or Society capability composition
+over typed resources, needs, locations/context where required, seeded environment
+processes, and validated actions. It does not make health or physical geography a
+universal agent requirement.
+
+**Core capabilities:** limited consumables, configurable needs and consequences,
+resource regeneration/depletion, seeded shocks or disasters, cooperation and
+allocation actions, termination conditions, and presets such as stranded group,
+limited food, disaster response, and commons collapse.
+
+**Acceptance criteria:** resource and need transitions are authoritative and
+replayable; identical non-model seeds reproduce environmental outcomes; public
+and private state remain distinct; at least two templates are configurable,
+observable, replayable, and comparable entirely in the browser.
+
+**Non-goals:** a physics engine, medical realism, unrestricted model-authored
+hazards, mandatory health state, or a universal spatial simulation.
 
 ## Transition Constraints and Risks
 
-- `ScenarioConfig` currently requires agents, providers/models, one environment,
-  memory, scheduling, storage, and a closed union of built-in actions. That is an
-  accurate version-1 contract, but not yet the generic custom definition promised
-  by M7.
+- `ScenarioConfig` remains the closed Society-oriented version-1 contract while
+  the separate M7 custom definition is the generic data-only path. Future shared
+  builders must preserve this distinction rather than forcing Society concepts
+  into every simulation.
 - Schema validation, the composition root, resolved-agent inspection, and some
   observation/profile projection contain explicit counter/commons and
   social/economic branches. M6/M7 isolated new mode/custom contracts without

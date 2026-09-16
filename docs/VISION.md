@@ -39,6 +39,12 @@ lifecycle. Modes are not separate engines, and custom definitions are validated
 data rather than executable code. The web application becomes the primary
 user-facing control plane over time while CLI and library use remain supported.
 
+For normal use, the complete experiment loop belongs in the browser: discover
+installed local models, create or generate editable agents, assign shared or
+per-agent models, configure a mode, preview exact resolved public/private inputs,
+run and observe the simulation, then stop, replay, and compare it. YAML, CLI, and
+Python remain valuable power-user interfaces, not prerequisites for this loop.
+
 ## Product Principles
 
 - **Domain-owned simulation:** AntFarm defines agents, environments, actions,
@@ -137,7 +143,11 @@ simulation definition and M8 exposes it through a structured browser builder. Th
 M9 adds AI-assisted proposal generation that always returns to the editable,
 validated definition workflow before execution. M10 completes the core product
 loop with model-free replay, run comparison, and richer result exploration.
-Further advanced social/economic systems are optional, demand-driven capabilities.
+The next phase turns those foundations into a friendly local AI sandbox: a shared
+web Agent Builder and installed-model discovery, a lightweight Conversation mode,
+then independently playable Society capabilities for economy, companies, social
+dynamics, governance, and justice. Richer live views and complete structured
+custom authoring evolve alongside those modes without weakening core boundaries.
 
 ## Long-Term Direction
 
@@ -157,11 +167,11 @@ The same simulation may eventually be observed or controlled through:
 Presentation layers should consume AntFarm state and events rather than becoming
 part of the simulation core.
 
-Later capabilities may include custom simulation authoring, AI-assisted structured
-definition generation, richer mode-specific visualization, improved memory,
-optional relationships and economies, run comparison, replay, human-agent
-interaction, voice, visual observation, parallel cognition, larger populations,
-Postgres, and evidence-led integrations with frameworks such as OASIS or CAMEL.
+Later capabilities may include richer mode-specific visualization, improved
+memory, optional relationships and economies, governance and survival systems,
+human-agent interaction, voice, visual observation, parallel cognition, larger
+populations, Postgres, and evidence-led integrations with frameworks such as
+OASIS or CAMEL.
 
 These capabilities must reuse AntFarm contracts rather than redefine them.
 
